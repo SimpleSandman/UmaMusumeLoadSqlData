@@ -3,9 +3,9 @@ using System.Data;
 
 using UmaMusumeLoadSqlData.Models;
 
-namespace UmaMusumeLoadSqlData.Helpers
+namespace UmaMusumeLoadSqlData.Utilities.Interfaces
 {
-    public interface ISqlHelper<T> where T : IDbConnection
+    public interface ISqlUtility<T> where T : IDbConnection
     {
         List<ColumnMetadata> SelectColumnMetadata(T connection, string tableName);
     }

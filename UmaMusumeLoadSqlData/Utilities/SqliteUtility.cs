@@ -3,12 +3,14 @@ using System.Data;
 using System.Data.SQLite;
 using System.Linq;
 
+using UmaMusumeLoadSqlData.Utilities.Interfaces;
 using UmaMusumeLoadSqlData.Models;
 
-namespace UmaMusumeLoadSqlData.Helpers
+namespace UmaMusumeLoadSqlData.Utilities
 {
-    public class SqliteHelper : ISqlHelper<SQLiteConnection>
+    public class SqliteUtility : ISqlUtility<SQLiteConnection>
     {
+        #region ISqlUtility Method
         public List<ColumnMetadata> SelectColumnMetadata(SQLiteConnection connection, string tableName)
         {
             List<ColumnMetadata> result = new List<ColumnMetadata>();
@@ -34,6 +36,7 @@ namespace UmaMusumeLoadSqlData.Helpers
 
             return result;
         }
+        #endregion
 
         public void LoadSqliteDataTables(SQLiteConnection connection, List<SqliteMasterRecord> sqliteTableNames, List<DataTable> sqliteDataTables)
         {

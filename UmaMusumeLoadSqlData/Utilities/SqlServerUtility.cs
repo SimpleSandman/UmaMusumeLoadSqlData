@@ -2,13 +2,16 @@
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
+using System.Threading.Tasks;
 
+using UmaMusumeLoadSqlData.Utilities.Interfaces;
 using UmaMusumeLoadSqlData.Models;
 
-namespace UmaMusumeLoadSqlData.Helpers
+namespace UmaMusumeLoadSqlData.Utilities
 {
-    public class SqlServerHelper : ISqlHelper<SqlConnection>
+    public class SqlServerUtility : ISqlUtility<SqlConnection>, ISqlDestination<SqlConnection>
     {
+        #region ISqlUtility Methods
         public List<ColumnMetadata> SelectColumnMetadata(SqlConnection connection, string tableName)
         {
             List<ColumnMetadata> result = new List<ColumnMetadata>();
@@ -45,9 +48,31 @@ namespace UmaMusumeLoadSqlData.Helpers
 
             return result;
         }
+        #endregion
 
-        public bool TryBulkInsertDataTable(string tableName, DataTable dataTable, SqlConnection connection, bool isFirstAttempt = true)
+        #region ISqlDestination Methods
+        public List<string> SelectTableNames(SqlConnection connection)
         {
+            List<string> result = new List<string>();
+
+            using (SqlCommand command = new SqlCommand("SELECT name FROM sys.tables", connection))
+            {
+                using (SqlDataReader reader = command.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        result.Add(reader.GetString(0));
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        public async Task<bool> TryBulkInsertDataTableAsync(SqlConnection connection, string tableName, DataTable dataTable, bool isFirstAttempt = true)
+        {
+            tableName = $"RawData.{tableName}";
+
             try
             {
                 SqlBulkCopy bulkCopy = new SqlBulkCopy(connection,
@@ -56,7 +81,8 @@ namespace UmaMusumeLoadSqlData.Helpers
                         | SqlBulkCopyOptions.UseInternalTransaction,
                     null);
                 bulkCopy.DestinationTableName = tableName;
-                bulkCopy.WriteToServer(dataTable);
+
+                await bulkCopy.WriteToServerAsync(dataTable);
 
                 return true;
             }
@@ -77,23 +103,6 @@ namespace UmaMusumeLoadSqlData.Helpers
 
             return false;
         }
-
-        public List<string> SelectSingleColumn(string commandText, SqlConnection connection)
-        {
-            List<string> result = new List<string>();
-
-            using (SqlCommand command = new SqlCommand(commandText, connection))
-            {
-                using (SqlDataReader reader = command.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        result.Add(reader.GetString(0));
-                    }
-                }
-            }
-
-            return result;
-        }
+        #endregion
     }
 }
