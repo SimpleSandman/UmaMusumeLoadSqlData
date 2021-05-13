@@ -83,6 +83,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                 bulkCopy.DestinationTableName = tableName;
 
                 await bulkCopy.WriteToServerAsync(dataTable);
+                Console.WriteLine($"Successfully loaded {tableName}");
 
                 return true;
             }

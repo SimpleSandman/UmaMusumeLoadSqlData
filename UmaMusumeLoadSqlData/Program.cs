@@ -83,6 +83,11 @@ namespace UmaMusumeLoadSqlData
             if (typeof(U) == typeof(MySqlCommand))
             {
                 tableSchema = "";
+                Console.WriteLine("\nAttempting to load table data into a MySQL/MariaDB database...\n");
+            }
+            else
+            {
+                Console.WriteLine("\nAttempting to load table data into a SQL Server database...\n");
             }
 
             /* Push new info into destination database */
