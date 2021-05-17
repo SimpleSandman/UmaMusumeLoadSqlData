@@ -61,7 +61,7 @@ namespace UmaMusumeLoadSqlData
                 await SqlDestination<SqlConnection, SqlCommand>("Server=.;Database=UmaMusume;Integrated Security=SSPI;");
 
                 // TODO: Store database name (table_schema) somewhere else
-                await SqlDestination<MySqlConnection, MySqlCommand>("User Id=root;Password=sa;Host=localhost;Database=umamusume;Character Set=utf8;AllowLoadLocalInfile=True");
+                await SqlDestination<MySqlConnection, MySqlCommand>("User Id=root;Password=sa;Host=localhost;Database=umamusume;Character Set=utf8mb4;AllowLoadLocalInfile=True");
             }
             catch (Exception ex)
             {
