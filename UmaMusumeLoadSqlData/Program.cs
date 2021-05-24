@@ -78,154 +78,172 @@ namespace UmaMusumeLoadSqlData
             where T : IDbConnection, new()
             where U : IDbCommand, new()
         {
-            // MSSQL uses a separate schema name than the database
-            string tableSchema = "RawData.";
-            if (typeof(U) == typeof(MySqlCommand))
+            try
             {
-                tableSchema = "";
-                Console.WriteLine("\nAttempting to load table data into a MySQL/MariaDB database...\n");
-            }
-            else
-            {
-                Console.WriteLine("\nAttempting to load table data into a SQL Server database...\n");
-            }
-
-            /* Push new info into destination database */
-            using (T destinationConnection = new T())
-            {
-                destinationConnection.ConnectionString = connectionString;
-                destinationConnection.Open();
-
-                // Check if there are any new SQLite tables that need to be created
-                List<string> sqlTableNames = SelectTableNames(destinationConnection);
-                foreach (string name in sqlTableNames)
+                // MSSQL uses a separate schema name than the database
+                string tableSchema = "RawData.";
+                if (typeof(U) == typeof(MySqlCommand))
                 {
-                    _sqliteTableNames.RemoveAll(t => t.TableName == name);
-                }
-
-                // Alert the owner of any new tables
-                if (_sqliteTableNames.Count > 0)
-                {
-                    Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
-                    foreach (string tableName in _sqliteTableNames.Select(n => n.TableName))
-                    {
-                        Console.WriteLine($"\"{tableName}\"");
-                    }
-
-                    // Remove sqliteDataTables that don't exist in the destination table yet
-                    _sqliteDataTables.RemoveAll(t => _sqliteTableNames.Any(n => n.TableName == t.TableName));
-                }
-
-                bool hadBulkInsertError = false;
-
-                foreach (DataTable sqliteDataTable in _sqliteDataTables.OrderBy(t => t.TableName))
-                {
-                    // Start wtih a clean slate
-                    using (U truncateCommand = new U())
-                    {
-                        truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}{sqliteDataTable.TableName}";
-                        truncateCommand.Connection = destinationConnection;
-                        truncateCommand.ExecuteNonQuery();
-                    }
-
-                    // Load DataTable into the destination database
-                    if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable))
-                    {
-                        // Look at the SQLite table and find the missing columns for the destination table
-                        using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
-                        {
-                            sqliteDebugConnection.Open();
-
-                            List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
-                            List<ColumnMetadata> sqlServerColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
-
-                            // Add missing columns
-                            foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !sqlServerColumns.Exists(s => s.ColumnName == lite.ColumnName)))
-                            {
-                                string isNullable = "NOT NULL";
-                                if (missingColumn.IsNullable)
-                                {
-                                    isNullable = "NULL";
-                                }
-
-                                string addColumn = "";
-                                if (missingColumn.ColumnDataType == "INTEGER")
-                                {
-                                    // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
-                                    addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} BIGINT {isNullable}";
-                                }
-                                else if (missingColumn.ColumnDataType == "TEXT")
-                                {
-                                    if (typeof(U) == typeof(MySqlCommand))
-                                    {
-                                        // NOTE: Make sure MySQL database is set to UTF-8 character set
-                                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
-                                    }
-                                    else
-                                    {
-                                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
-                                    }
-                                }
-                                else
-                                {
-                                    Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
-                                    CloseProgram();
-                                }
-
-                                // Try to add the missing columns
-                                try
-                                {
-                                    using (U addColumnCommand = new U())
-                                    {
-                                        addColumnCommand.CommandText = addColumn;
-                                        addColumnCommand.Connection = destinationConnection;
-                                        addColumnCommand.ExecuteNonQuery();
-                                    }
-                                }
-                                catch (Exception ex)
-                                {
-                                    Console.WriteLine($"\nERROR: {ex.Message}");
-
-                                    if (string.IsNullOrEmpty(addColumn))
-                                    {
-                                        Console.WriteLine($"SQL Command: {addColumn}");
-                                    }
-
-                                    hadBulkInsertError = true;
-                                }
-                            }
-                        }
-
-                        // Try to insert again with the newly added columns
-                        if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable, false))
-                        {
-                            hadBulkInsertError = true;
-                        }
-                    }
-                }
-
-                // Provide special output per error
-                if (hadBulkInsertError)
-                {
-                    Console.WriteLine("\nRaw table reload successful, but has bulk insert errors.");
-                    Console.WriteLine("Please read the error messages as these tables are currently empty.");
+                    tableSchema = "";
+                    Console.WriteLine("\nAttempting to load table data into a MySQL/MariaDB database...\n");
                 }
                 else
                 {
-                    Console.WriteLine("\nRaw table reload successful!");
+                    Console.WriteLine("\nAttempting to load table data into a SQL Server database...\n");
                 }
+
+                /* Push new info into destination database */
+                using (T destinationConnection = new T())
+                {
+                    destinationConnection.ConnectionString = connectionString;
+                    destinationConnection.Open();
+
+                    // Check if there are any new SQLite tables that need to be created
+                    List<string> sqlTableNames = SelectTableNames(destinationConnection);
+                    foreach (string name in sqlTableNames)
+                    {
+                        _sqliteTableNames.RemoveAll(t => t.TableName == name);
+                    }
+
+                    // Alert the owner of any new tables
+                    if (_sqliteTableNames.Count > 0)
+                    {
+                        Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
+                        foreach (string tableName in _sqliteTableNames.Select(n => n.TableName))
+                        {
+                            Console.WriteLine($"\"{tableName}\"");
+                        }
+
+                        Console.WriteLine();
+
+                        // Remove sqliteDataTables that don't exist in the destination table yet
+                        _sqliteDataTables.RemoveAll(t => _sqliteTableNames.Any(n => n.TableName == t.TableName));
+                    }
+
+                    bool hadBulkInsertError = false;
+
+                    foreach (DataTable sqliteDataTable in _sqliteDataTables.OrderBy(t => t.TableName))
+                    {
+                        // Start wtih a clean slate
+                        using (U truncateCommand = new U())
+                        {
+                            truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}{sqliteDataTable.TableName}";
+                            truncateCommand.Connection = destinationConnection;
+                            truncateCommand.ExecuteNonQuery();
+                        }
+
+                        // Load DataTable into the destination database
+                        if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable))
+                        {
+                            // Look at the SQLite table and find the missing columns for the destination table
+                            using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
+                            {
+                                sqliteDebugConnection.Open();
+
+                                List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
+                                List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
+
+                                // Add missing columns
+                                foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
+                                {
+                                    string isNullable = "NOT NULL";
+                                    if (missingColumn.IsNullable)
+                                    {
+                                        isNullable = "NULL";
+                                    }
+
+                                    string addColumn = "";
+                                    if (missingColumn.ColumnDataType == "INTEGER")
+                                    {
+                                        // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
+                                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} BIGINT {isNullable}";
+                                    }
+                                    else if (missingColumn.ColumnDataType == "TEXT")
+                                    {
+                                        if (typeof(U) == typeof(MySqlCommand))
+                                        {
+                                            // NOTE: Make sure MySQL database is set to "utf8mb4" character set
+                                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
+                                        }
+                                        else
+                                        {
+                                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
+                                        }
+                                    }
+                                    else
+                                    {
+                                        Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
+                                        CloseProgram();
+                                    }
+
+                                    // Try to add the missing columns
+                                    try
+                                    {
+                                        using (U addColumnCommand = new U())
+                                        {
+                                            addColumnCommand.CommandText = addColumn;
+                                            addColumnCommand.Connection = destinationConnection;
+                                            addColumnCommand.ExecuteNonQuery();
+                                        }
+
+                                        Console.WriteLine($"Successfully added missing column with script: \"{addColumn}\"\n");
+                                    }
+                                    catch (Exception ex)
+                                    {
+                                        Console.WriteLine($"\nERROR: {ex.Message}");
+
+                                        if (string.IsNullOrEmpty(addColumn))
+                                        {
+                                            Console.WriteLine($"SQL Command: {addColumn}");
+                                        }
+
+                                        hadBulkInsertError = true;
+                                    }
+                                }
+                            }
+
+                            // Try to insert again with the newly added columns
+                            if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable, false))
+                            {
+                                hadBulkInsertError = true;
+                            }
+                        }
+                    }
+
+                    // Provide special output per error
+                    if (hadBulkInsertError)
+                    {
+                        Console.WriteLine("\nRaw table reload successful, but has bulk insert errors.");
+                        Console.WriteLine("Please read the error messages as these tables are currently empty.");
+                    }
+                    else
+                    {
+                        Console.WriteLine("\nRaw table reload successful!");
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
         }
 
         private static List<string> SelectTableNames<T>(T connection) where T : IDbConnection
         {
-            if (typeof(T) == typeof(SqlConnection))
+            try
             {
-                return _sqlServerUtility.SelectTableNames(connection as SqlConnection);
+                if (typeof(T) == typeof(SqlConnection))
+                {
+                    return _sqlServerUtility.SelectTableNames(connection as SqlConnection);
+                }
+                else if (typeof(T) == typeof(MySqlConnection))
+                {
+                    return _mySqlUtility.SelectTableNames(connection as MySqlConnection);
+                }
             }
-            else if (typeof(T) == typeof(MySqlConnection))
+            catch (Exception ex)
             {
-                return _mySqlUtility.SelectTableNames(connection as MySqlConnection);
+                Console.WriteLine(ex.Message);
             }
 
             return null;
@@ -233,13 +251,24 @@ namespace UmaMusumeLoadSqlData
 
         private static List<ColumnMetadata> SelectColumnMetadata<T>(T connection, string tableName) where T : IDbConnection
         {
-            if (typeof(T) == typeof(SqlConnection))
+            try
             {
-                return _sqlServerUtility.SelectColumnMetadata(connection as SqlConnection, tableName);
+                if (typeof(T) == typeof(SqlConnection))
+                {
+                    return _sqlServerUtility.SelectColumnMetadata(connection as SqlConnection, tableName);
+                }
+                else if (typeof(T) == typeof(MySqlConnection))
+                {
+                    return _mySqlUtility.SelectColumnMetadata(connection as MySqlConnection, tableName);
+                }
+                else if (typeof(T) == typeof(SQLiteConnection))
+                {
+                    return _sqliteUtility.SelectColumnMetadata(connection as SQLiteConnection, tableName);
+                }
             }
-            else if (typeof(T) == typeof(MySqlConnection))
+            catch (Exception ex)
             {
-                return _mySqlUtility.SelectColumnMetadata(connection as MySqlConnection, tableName);
+                Console.WriteLine(ex.Message);
             }
 
             return null;
@@ -248,13 +277,20 @@ namespace UmaMusumeLoadSqlData
         private static async Task<bool> TryBulkInsertDataTableAsync<T>(T connection, string tableName, DataTable dataTable, bool isFirstAttempt = true)
             where T : IDbConnection
         {
-            if (typeof(T) == typeof(SqlConnection))
+            try
             {
-                return await _sqlServerUtility.TryBulkInsertDataTableAsync(connection as SqlConnection, tableName, dataTable, isFirstAttempt);
+                if (typeof(T) == typeof(SqlConnection))
+                {
+                    return await _sqlServerUtility.TryBulkInsertDataTableAsync(connection as SqlConnection, tableName, dataTable, isFirstAttempt);
+                }
+                else if (typeof(T) == typeof(MySqlConnection))
+                {
+                    return await _mySqlUtility.TryBulkInsertDataTableAsync(connection as MySqlConnection, tableName, dataTable, isFirstAttempt);
+                }
             }
-            else if (typeof(T) == typeof(MySqlConnection))
+            catch (Exception ex)
             {
-                return await _mySqlUtility.TryBulkInsertDataTableAsync(connection as MySqlConnection, tableName, dataTable, isFirstAttempt);
+                Console.WriteLine(ex.Message);
             }
 
             return false;
