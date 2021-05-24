@@ -136,71 +136,7 @@ namespace UmaMusumeLoadSqlData
                         if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable))
                         {
                             // Look at the SQLite table and find the missing columns for the destination table
-                            using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
-                            {
-                                sqliteDebugConnection.Open();
-
-                                List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
-                                List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
-
-                                // Add missing columns
-                                foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
-                                {
-                                    string isNullable = "NOT NULL";
-                                    if (missingColumn.IsNullable)
-                                    {
-                                        isNullable = "NULL";
-                                    }
-
-                                    string addColumn = "";
-                                    if (missingColumn.ColumnDataType == "INTEGER")
-                                    {
-                                        // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
-                                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} BIGINT {isNullable}";
-                                    }
-                                    else if (missingColumn.ColumnDataType == "TEXT")
-                                    {
-                                        if (typeof(U) == typeof(MySqlCommand))
-                                        {
-                                            // NOTE: Make sure MySQL database is set to "utf8mb4" character set
-                                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
-                                        }
-                                        else
-                                        {
-                                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
-                                        }
-                                    }
-                                    else
-                                    {
-                                        Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
-                                        CloseProgram();
-                                    }
-
-                                    // Try to add the missing columns
-                                    try
-                                    {
-                                        using (U addColumnCommand = new U())
-                                        {
-                                            addColumnCommand.CommandText = addColumn;
-                                            addColumnCommand.Connection = destinationConnection;
-                                            addColumnCommand.ExecuteNonQuery();
-                                        }
-
-                                        Console.WriteLine($"Successfully added missing column with script: \"{addColumn}\"\n");
-                                    }
-                                    catch (Exception ex)
-                                    {
-                                        Console.WriteLine($"\nERROR: {ex.Message}");
-
-                                        if (string.IsNullOrEmpty(addColumn))
-                                        {
-                                            Console.WriteLine($"SQL Command: {addColumn}");
-                                        }
-
-                                        hadBulkInsertError = true;
-                                    }
-                                }
-                            }
+                            hadBulkInsertError = AreMissingColumnsResolved<T, U>(destinationConnection, sqliteDataTable, tableSchema);
 
                             // Try to insert again with the newly added columns
                             if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable, false))
@@ -226,6 +162,79 @@ namespace UmaMusumeLoadSqlData
             {
                 Console.WriteLine(ex.Message);
             }
+        }
+
+        private static bool AreMissingColumnsResolved<T, U>(T destinationConnection, DataTable sqliteDataTable, string tableSchema)
+            where T : IDbConnection, new()
+            where U : IDbCommand, new()
+        {
+            using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
+            {
+                sqliteDebugConnection.Open();
+
+                List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
+                List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
+
+                // Add missing columns
+                foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
+                {
+                    string isNullable = "NOT NULL";
+                    if (missingColumn.IsNullable)
+                    {
+                        isNullable = "NULL";
+                    }
+
+                    string addColumn = "";
+                    if (missingColumn.ColumnDataType == "INTEGER")
+                    {
+                        // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
+                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} BIGINT {isNullable}";
+                    }
+                    else if (missingColumn.ColumnDataType == "TEXT")
+                    {
+                        if (typeof(U) == typeof(MySqlCommand))
+                        {
+                            // NOTE: Make sure MySQL database is set to "utf8mb4" character set
+                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
+                        }
+                        else
+                        {
+                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
+                        }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
+                        CloseProgram();
+                    }
+
+                    // Try to add the missing columns
+                    try
+                    {
+                        using (U addColumnCommand = new U())
+                        {
+                            addColumnCommand.CommandText = addColumn;
+                            addColumnCommand.Connection = destinationConnection;
+                            addColumnCommand.ExecuteNonQuery();
+                        }
+
+                        Console.WriteLine($"Successfully added missing column with script: \"{addColumn}\"\n");
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"\nERROR: {ex.Message}");
+
+                        if (string.IsNullOrEmpty(addColumn))
+                        {
+                            Console.WriteLine($"SQL Command: {addColumn}");
+                        }
+
+                        return true;
+                    }
+                }
+            }
+
+            return false;
         }
 
         private static List<string> SelectTableNames<T>(T connection) where T : IDbConnection
