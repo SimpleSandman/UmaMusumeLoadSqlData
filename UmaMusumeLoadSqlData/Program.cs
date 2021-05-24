@@ -109,9 +109,9 @@ namespace UmaMusumeLoadSqlData
                     if (_sqliteTableNames.Count > 0)
                     {
                         Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
-                        foreach (string tableName in _sqliteTableNames.Select(n => n.TableName))
+                        foreach (SqliteMasterRecord table in _sqliteTableNames)
                         {
-                            Console.WriteLine($"\"{tableName}\"");
+                            Console.WriteLine($"\"{table.TableName}\"");
                         }
 
                         Console.WriteLine();
