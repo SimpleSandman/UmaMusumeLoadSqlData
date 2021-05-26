@@ -82,7 +82,7 @@ namespace UmaMusumeLoadSqlData
             {
                 // MSSQL uses a separate schema name than the database
                 string tableSchema = "RawData.";
-                if (typeof(U) == typeof(MySqlCommand))
+                if (typeof(T) == typeof(MySqlConnection))
                 {
                     tableSchema = "";
                     Console.WriteLine("\nAttempting to load table data into a MySQL/MariaDB database...\n");
@@ -111,7 +111,7 @@ namespace UmaMusumeLoadSqlData
                         Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
                         foreach (SqliteMasterRecord table in _sqliteTableNames)
                         {
-                            Console.WriteLine($"\"{table.TableName}\"");
+                            Console.WriteLine($"SQLite script: \"{table.SqlScript}\"");
                         }
 
                         Console.WriteLine();
