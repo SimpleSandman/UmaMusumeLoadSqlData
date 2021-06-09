@@ -25,7 +25,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                     IS_NULLABLE
                 FROM information_schema.COLUMNS
                 WHERE TABLE_NAME = '{tableName}'
-                    AND TABLE_SCHEMA = 'umamusume'
+                    AND TABLE_SCHEMA = '{connection.Database}'
                 ORDER BY TABLE_NAME, ORDINAL_POSITION;";
 
             using (MySqlCommand command = new MySqlCommand(commandText, connection))
@@ -54,7 +54,7 @@ namespace UmaMusumeLoadSqlData.Utilities
             List<string> result = new List<string>();
 
             // TODO: Store database name (table_schema) somewhere else
-            using (MySqlCommand command = new MySqlCommand("SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = 'umamusume'", connection))
+            using (MySqlCommand command = new MySqlCommand($"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{connection.Database}'", connection))
             {
                 using (MySqlDataReader reader = command.ExecuteReader())
                 {
@@ -84,6 +84,14 @@ namespace UmaMusumeLoadSqlData.Utilities
             }
             catch (Exception ex)
             {
+                if (ex.Message.Contains("To use MySqlBulkLoader.Local=true, set AllowLoadLocalInfile=true in the connection string"))
+                {
+                    Console.WriteLine($"\nFATAL ERROR: MySql connection string doesn't contain \"AllowLoadLocalInfile = true\".");
+                    Console.WriteLine("This is required for BULK COPY inserts into a table.");
+
+                    Program.CloseProgram();
+                }
+
                 if (!isFirstAttempt)
                 {
                     Console.WriteLine($"\nERROR: Could not bulk insert for the table \"{tableName}\"");

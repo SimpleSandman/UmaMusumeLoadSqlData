@@ -1,5 +1,6 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Data.SQLite;
@@ -57,11 +58,26 @@ namespace UmaMusumeLoadSqlData
                     _sqliteUtility.LoadSqliteDataTables(connection, _sqliteTableNames, _sqliteDataTables);
                 }
 
-                // TODO: Create proper connection string handling for PROD
-                await SqlDestination<SqlConnection, SqlCommand>("Server=.;Database=UmaMusume;Integrated Security=SSPI;");
+                string sqlServerConnectionString, mySqlConnectionString;
 
-                // TODO: Store database name (table_schema) somewhere else
-                await SqlDestination<MySqlConnection, MySqlCommand>("User Id=root;Password=sa;Host=localhost;Database=umamusume;Character Set=utf8mb4;AllowLoadLocalInfile=True");
+#if DEBUG
+                sqlServerConnectionString = ConfigurationManager.ConnectionStrings["SqlServerConnectionDev"].ConnectionString;
+                mySqlConnectionString = ConfigurationManager.ConnectionStrings["MySqlConnectionDev"].ConnectionString;
+#else
+                sqlServerConnectionString = ConfigurationManager.ConnectionStrings["SqlServerConnectionProd"].ConnectionString;
+                mySqlConnectionString = ConfigurationManager.ConnectionStrings["MySqlConnectionProd"].ConnectionString;
+#endif
+
+                /* Import data from SQLite into the provided databases below */
+                if (!string.IsNullOrEmpty(sqlServerConnectionString))
+                {
+                    await SqlDestination<SqlConnection, SqlCommand>(sqlServerConnectionString).ConfigureAwait(false);
+                }
+
+                if (!string.IsNullOrEmpty(mySqlConnectionString))
+                {
+                    await SqlDestination<MySqlConnection, MySqlCommand>(mySqlConnectionString).ConfigureAwait(false);
+                }
             }
             catch (Exception ex)
             {
@@ -305,7 +321,7 @@ namespace UmaMusumeLoadSqlData
             return false;
         }
 
-        private static void CloseProgram()
+        public static void CloseProgram()
         {
             Console.WriteLine("\nPress any key to close this program...");
             Console.ReadKey();
