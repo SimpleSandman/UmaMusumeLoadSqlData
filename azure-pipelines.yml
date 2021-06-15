@@ -16,18 +16,30 @@ variables:
 
 steps:
 - task: NuGetToolInstaller@1
+  displayName: 'NuGet Tool Installer'
 
 - task: NuGetCommand@2
+  displayName: 'Restore'
   inputs:
     command: 'restore'
     restoreSolution: '$(solution)'
+    feedsToUse: 'select'
+    verbosityRestore: 'Normal'
 
 - task: DotNetCoreCLI@1
+  displayName: 'Build'
   inputs:
     command: 'build'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
 
 - task: DotNetCoreCLI@2
+  displayName: 'Run'
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
+  env:
+    ASPNETCORE_ENVIRONMENT: '$(ASPNETCORE_ENVIRONMENT)'
+    BRANCH_NAME: '$(BRANCH_NAME)'
+    MYSQL_CONNECTION_STRING: '$(MYSQL_CONNECTION_STRING)'
+    REPO_NAME: '$(REPO_NAME)'
+    SQLSERVER_CONNECTION_STRING: ''
