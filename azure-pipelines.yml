@@ -13,11 +13,11 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
-  ASPNETCORE_ENVIRONMENT: '$(ASPNETCORE_ENVIRONMENT)'
-  BRANCH_NAME: '$(BRANCH_NAME)'
-  MYSQL_CONNECTION_STRING: '$(MYSQL_CONNECTION_STRING)'
-  REPO_NAME: '$(REPO_NAME)'
-  SQLSERVER_CONNECTION_STRING: '$(SQLSERVER_CONNECTION_STRING)'
+  ASPNETCORE_ENVIRONMENT: '$(AspNetCore.Environment)'
+  BRANCH_NAME: '$(Branch.Name)'
+  MYSQL_CONNECTION_STRING: '$(MySql.Connection.String)'
+  REPO_NAME: '$(Repo.Name)'
+  SQLSERVER_CONNECTION_STRING: '$(SqlServer.Connection.String)'
 
 steps:
 - task: NuGetToolInstaller@1
@@ -37,17 +37,8 @@ steps:
     command: 'build'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
 
-- task: PowerShell@2
-  displayName: 'Set environment variables'
-  inputs:
-    targetType: 'inline'
-    script: |
-      Write-Host "Making the sauceUsername available as an environment variable."
-      Write-Host "##vso[task.setvariable variable=ASPNETCORE_ENVIRONMENT;]$(ASPNETCORE_ENVIRONMENT)"
-
 - task: DotNetCoreCLI@2
   displayName: 'Run'
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
-
