@@ -6,6 +6,7 @@ using System.Data.SqlClient;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
+using System.Net;
 using System.Threading.Tasks;
 
 using MySqlConnector;
@@ -23,8 +24,7 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
 
-        private static readonly string _masterDbFilepath 
-            = @$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\AppData\LocalLow\Cygames\umamusume\master\master.mdb";
+        private static readonly string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
 
         public static void Main()
         {
@@ -35,14 +35,26 @@ namespace UmaMusumeLoadSqlData
         {
             try
             {
+                /* Download master.mdb file from remote GitHub repo */
+                string rawUrl = "https://raw.githubusercontent.com/SimpleSandman/UmaMusumeMasterMDB/master/master.mdb";
+
+                using (WebClient client = new WebClient())
+                {
+                    client.Headers.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
+                    byte[] bytes = client.DownloadData(rawUrl);
+                    File.WriteAllBytes(_masterDbFilepath, bytes);
+                }
+
+                Console.WriteLine("SUCCESS: Downloaded master.mdb");
+
                 /* Verify master.mdb exists */
                 if (File.Exists(_masterDbFilepath))
                 {
-                    Console.WriteLine("Found master.mdb");
+                    Console.WriteLine("SUCCESS: Found master.mdb");
                 }
                 else
                 {
-                    Console.WriteLine("Cannot find master.mdb");
+                    Console.WriteLine("FATAL ERROR: Cannot find master.mdb");
                     CloseProgram();
                 }
 
@@ -165,12 +177,12 @@ namespace UmaMusumeLoadSqlData
                     // Provide special output per error
                     if (hadBulkInsertError)
                     {
-                        Console.WriteLine("\nRaw table reload successful, but has bulk insert errors.");
+                        Console.WriteLine("\nWARNING: Raw table reload successful, but has bulk insert errors.");
                         Console.WriteLine("Please read the error messages as these tables are currently empty.");
                     }
                     else
                     {
-                        Console.WriteLine("\nRaw table reload successful!");
+                        Console.WriteLine("\nSUCCESS: Raw table reload successful!");
                     }
                 }
             }
@@ -320,7 +332,9 @@ namespace UmaMusumeLoadSqlData
 
             return false;
         }
+        #endregion
 
+        #region Public Methods
         public static void CloseProgram()
         {
             Console.WriteLine("\nPress any key to close this program...");
