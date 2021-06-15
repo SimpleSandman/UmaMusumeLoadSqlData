@@ -77,15 +77,16 @@ namespace UmaMusumeLoadSqlData
                 string mySqlConnectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
                 string sqlServerConnectionString = Environment.GetEnvironmentVariable("SQLSERVER_CONNECTION_STRING");
 
+                if (!string.IsNullOrEmpty(mySqlConnectionString))
+                {
+                    await SqlDestination<MySqlConnection, MySqlCommand>(mySqlConnectionString).ConfigureAwait(false);
+                }
+
                 if (!string.IsNullOrEmpty(sqlServerConnectionString))
                 {
                     await SqlDestination<SqlConnection, SqlCommand>(sqlServerConnectionString).ConfigureAwait(false);
                 }
 
-                if (!string.IsNullOrEmpty(mySqlConnectionString))
-                {
-                    await SqlDestination<MySqlConnection, MySqlCommand>(mySqlConnectionString).ConfigureAwait(false);
-                }
             }
             catch (Exception ex)
             {
@@ -333,8 +334,17 @@ namespace UmaMusumeLoadSqlData
         #region Public Methods
         public static void CloseProgram()
         {
-            Console.WriteLine("\nPress any key to close this program...");
-            Console.ReadKey();
+            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+            {
+                Console.WriteLine("\nPress any key to close this program...");
+                Console.ReadKey();
+            }
+            else
+            {
+                Console.WriteLine("\nProgram finished executing.");
+                Console.WriteLine("Exiting now...");
+            }
+            
             Environment.Exit(0);
         }
         #endregion
