@@ -13,6 +13,11 @@ variables:
   solution: '**/*.sln'
   buildPlatform: 'Any CPU'
   buildConfiguration: 'Release'
+  ASPNETCORE_ENVIRONMENT: '$(ASPNETCORE_ENVIRONMENT)'
+  BRANCH_NAME: '$(BRANCH_NAME)'
+  MYSQL_CONNECTION_STRING: '$(MYSQL_CONNECTION_STRING)'
+  REPO_NAME: '$(REPO_NAME)'
+  SQLSERVER_CONNECTION_STRING: '$(SQLSERVER_CONNECTION_STRING)'
 
 steps:
 - task: NuGetToolInstaller@1
@@ -37,9 +42,3 @@ steps:
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
-  env:
-    ASPNETCORE_ENVIRONMENT: $(ASPNETCORE_ENVIRONMENT)
-    BRANCH_NAME: $(BRANCH_NAME)
-    MYSQL_CONNECTION_STRING: $(MYSQL_CONNECTION_STRING)
-    REPO_NAME: $(REPO_NAME)
-    SQLSERVER_CONNECTION_STRING: $(SQLSERVER_CONNECTION_STRING)
