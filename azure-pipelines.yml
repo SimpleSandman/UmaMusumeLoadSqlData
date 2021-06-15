@@ -15,10 +15,6 @@ variables:
   buildConfiguration: 'Release'
 
 steps:
-- script: echo $MYSQL_CONNECTION_STRING
-  env:
-    MYSQL_CONNECTION_STRING: $(MySql.Connection.String)
-
 - task: NuGetToolInstaller@1
   displayName: 'NuGet Tool Installer'
 
@@ -42,3 +38,5 @@ steps:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
     arguments: '--configuration $(BuildConfiguration)'
+  env:
+    MYSQL_CONNECTION_STRING: $(MYSQL_CONNECTION_STRING)
