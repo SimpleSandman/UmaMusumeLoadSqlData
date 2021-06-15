@@ -37,8 +37,17 @@ steps:
     command: 'build'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
 
+- task: PowerShell@2
+  displayName: 'Set environment variables'
+  inputs:
+    targetType: 'inline'
+    script: |
+      Write-Host "Making the sauceUsername available as an environment variable."
+      Write-Host "##vso[task.setvariable variable=ASPNETCORE_ENVIRONMENT;]$(ASPNETCORE_ENVIRONMENT)"
+
 - task: DotNetCoreCLI@2
   displayName: 'Run'
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
+
