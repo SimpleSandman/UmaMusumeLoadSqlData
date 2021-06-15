@@ -37,6 +37,6 @@ steps:
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
-    arguments: '--configuration $(BuildConfiguration)'
+    arguments: '--configuration $(BuildConfiguration) --environment $(AspNetCore.Environment)'
   env:
     MYSQL_CONNECTION_STRING: $(MYSQL_CONNECTION_STRING)
