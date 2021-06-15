@@ -15,6 +15,7 @@ variables:
   buildConfiguration: 'Release'
 
 steps:
+
 - task: NuGetToolInstaller@1
   displayName: 'NuGet Tool Installer'
 
@@ -37,6 +38,5 @@ steps:
   inputs:
     command: 'run'
     projects: 'UmaMusumeLoadSqlData/UmamusumeLoadSqlData.csproj'
-    arguments: '--configuration $(BuildConfiguration) --environment $(AspNetCore.Environment)'
   env:
-    MYSQL_CONNECTION_STRING: $(MYSQL_CONNECTION_STRING)
+    ASPNETCORE_ENVIRONMENT: 'Production'
