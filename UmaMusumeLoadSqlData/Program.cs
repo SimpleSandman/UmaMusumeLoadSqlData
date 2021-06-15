@@ -32,6 +32,8 @@ namespace UmaMusumeLoadSqlData
 
         static async Task MainAsync()
         {
+            Console.WriteLine($">>> Now running in \"{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}\" <<<\n");
+
             try
             {
                 /* Download master.mdb file from remote GitHub repo */
@@ -77,12 +79,12 @@ namespace UmaMusumeLoadSqlData
                 string mySqlConnectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
                 string sqlServerConnectionString = Environment.GetEnvironmentVariable("SQLSERVER_CONNECTION_STRING");
 
-                if (!string.IsNullOrEmpty(mySqlConnectionString))
+                if (!string.IsNullOrEmpty(mySqlConnectionString) && mySqlConnectionString != "N/A")
                 {
                     await SqlDestination<MySqlConnection, MySqlCommand>(mySqlConnectionString).ConfigureAwait(false);
                 }
 
-                if (!string.IsNullOrEmpty(sqlServerConnectionString))
+                if (!string.IsNullOrEmpty(sqlServerConnectionString) && sqlServerConnectionString != "N/A")
                 {
                     await SqlDestination<SqlConnection, SqlCommand>(sqlServerConnectionString).ConfigureAwait(false);
                 }
