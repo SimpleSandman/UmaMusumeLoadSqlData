@@ -361,6 +361,3 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-
-# Project ignore(s)
-UmaMusumeLoadSqlData/App*.config

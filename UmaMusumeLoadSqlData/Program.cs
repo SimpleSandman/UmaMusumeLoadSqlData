@@ -1,6 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Configuration;
 using System.Data;
 using System.Data.SqlClient;
 using System.Data.SQLite;
@@ -36,7 +35,11 @@ namespace UmaMusumeLoadSqlData
             try
             {
                 /* Download master.mdb file from remote GitHub repo */
-                string rawUrl = "https://raw.githubusercontent.com/SimpleSandman/UmaMusumeMasterMDB/master/master.mdb";
+                string repoName = Environment.GetEnvironmentVariable("REPO_NAME");
+                string branchName = Environment.GetEnvironmentVariable("BRANCH_NAME");
+                string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/master.mdb";
+
+                Console.WriteLine($"Downloading master.mdb from \"{repoName}/{branchName}\"...");
 
                 using (WebClient client = new WebClient())
                 {
@@ -70,17 +73,10 @@ namespace UmaMusumeLoadSqlData
                     _sqliteUtility.LoadSqliteDataTables(connection, _sqliteTableNames, _sqliteDataTables);
                 }
 
-                string sqlServerConnectionString, mySqlConnectionString;
-
-#if DEBUG
-                sqlServerConnectionString = ConfigurationManager.ConnectionStrings["SqlServerConnectionDev"].ConnectionString;
-                mySqlConnectionString = ConfigurationManager.ConnectionStrings["MySqlConnectionDev"].ConnectionString;
-#else
-                sqlServerConnectionString = ConfigurationManager.ConnectionStrings["SqlServerConnectionProd"].ConnectionString;
-                mySqlConnectionString = ConfigurationManager.ConnectionStrings["MySqlConnectionProd"].ConnectionString;
-#endif
-
                 /* Import data from SQLite into the provided databases below */
+                string mySqlConnectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
+                string sqlServerConnectionString = Environment.GetEnvironmentVariable("SQLSERVER_CONNECTION_STRING");
+
                 if (!string.IsNullOrEmpty(sqlServerConnectionString))
                 {
                     await SqlDestination<SqlConnection, SqlCommand>(sqlServerConnectionString).ConfigureAwait(false);

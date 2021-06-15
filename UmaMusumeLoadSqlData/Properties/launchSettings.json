@@ -1,0 +1,14 @@
+{
+  "profiles": {
+    "UmaMusumeLoadSqlData": {
+      "commandName": "Project",
+      "environmentVariables": {
+        "REPO_NAME": "SimpleSandman/UmaMusumeMasterMDB",
+        "MYSQL_CONNECTION_STRING": "user id=root;password=sa;host=localhost;database=umamusume;character set=utf8mb4;AllowLoadLocalInfile = true",
+        "BRANCH_NAME": "master",
+        "SQLSERVER_CONNECTION_STRING": "Server=.;Database=UmaMusume;Integrated Security=SSPI;",
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      }
+    }
+  }
+}
