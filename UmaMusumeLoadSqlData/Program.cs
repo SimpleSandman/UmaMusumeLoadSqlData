@@ -26,17 +26,17 @@ namespace UmaMusumeLoadSqlData
         private static readonly string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
 
         private static string _aspNetCoreEnvironment;
+        private static string _repoName;
         private static string _branchName;
         private static string _mySqlConnectionString;
-        private static string _repoName;
         private static string _sqlServerConnectionString;
 
         static void Main(string[] args)
         {
             _aspNetCoreEnvironment = args[0];
-            _branchName = args[1];
-            _mySqlConnectionString = args[2];
-            _repoName = args[3];
+            _repoName = args[1];
+            _branchName = args[2];
+            _mySqlConnectionString = args[3];
             _sqlServerConnectionString = args[4];
 
             MainAsync().GetAwaiter().GetResult();
@@ -86,7 +86,6 @@ namespace UmaMusumeLoadSqlData
                 }
 
                 /* Import data from SQLite into the provided databases below */
-
                 if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
                 {
                     await SqlDestination<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
