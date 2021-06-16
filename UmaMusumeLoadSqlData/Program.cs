@@ -25,23 +25,33 @@ namespace UmaMusumeLoadSqlData
 
         private static readonly string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
 
-        public static void Main()
+        private static string _aspNetCoreEnvironment;
+        private static string _branchName;
+        private static string _mySqlConnectionString;
+        private static string _repoName;
+        private static string _sqlServerConnectionString;
+
+        static void Main(string[] args)
         {
+            _aspNetCoreEnvironment = args[0];
+            _branchName = args[1];
+            _mySqlConnectionString = args[2];
+            _repoName = args[3];
+            _sqlServerConnectionString = args[4];
+
             MainAsync().GetAwaiter().GetResult();
         }
 
         static async Task MainAsync()
         {
-            Console.WriteLine($">>> Now running in \"{Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT")}\" <<<\n");
+            Console.WriteLine($">>> Now running in \"{_aspNetCoreEnvironment}\" <<<\n");
 
             try
             {
                 /* Download master.mdb file from remote GitHub repo */
-                string repoName = Environment.GetEnvironmentVariable("REPO_NAME");
-                string branchName = Environment.GetEnvironmentVariable("BRANCH_NAME");
-                string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/master.mdb";
+                string rawUrl = $"https://raw.githubusercontent.com/{_repoName}/{_branchName}/master.mdb";
 
-                Console.WriteLine($"Downloading master.mdb from \"{repoName}/{branchName}\"...");
+                Console.WriteLine($"Downloading master.mdb from \"{_repoName}/{_branchName}\"...");
 
                 using (WebClient client = new WebClient())
                 {
@@ -76,17 +86,15 @@ namespace UmaMusumeLoadSqlData
                 }
 
                 /* Import data from SQLite into the provided databases below */
-                string mySqlConnectionString = Environment.GetEnvironmentVariable("MYSQL_CONNECTION_STRING");
-                string sqlServerConnectionString = Environment.GetEnvironmentVariable("SQLSERVER_CONNECTION_STRING");
 
-                if (!string.IsNullOrEmpty(mySqlConnectionString) && mySqlConnectionString != "N/A")
+                if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
                 {
-                    await SqlDestination<MySqlConnection, MySqlCommand>(mySqlConnectionString).ConfigureAwait(false);
+                    await SqlDestination<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
                 }
 
-                if (!string.IsNullOrEmpty(sqlServerConnectionString) && sqlServerConnectionString != "N/A")
+                if (!string.IsNullOrEmpty(_sqlServerConnectionString) && _sqlServerConnectionString != "N/A")
                 {
-                    await SqlDestination<SqlConnection, SqlCommand>(sqlServerConnectionString).ConfigureAwait(false);
+                    await SqlDestination<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
                 }
 
             }
@@ -336,7 +344,7 @@ namespace UmaMusumeLoadSqlData
         #region Public Methods
         public static void CloseProgram()
         {
-            if (Environment.GetEnvironmentVariable("ASPNETCORE_ENVIRONMENT") == "Development")
+            if (_aspNetCoreEnvironment == "Development")
             {
                 Console.WriteLine("\nPress any key to close this program...");
                 Console.ReadKey();
