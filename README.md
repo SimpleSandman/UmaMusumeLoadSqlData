@@ -1,4 +1,4 @@
-# Uma Musume: Load SQL Data [![Build status](https://ci.appveyor.com/api/projects/status/19skk0jwbcy4ogy7/branch/master?svg=true)](https://ci.appveyor.com/project/SimpleSandman/umamusumeloadsqldata/branch/master)
+# Uma Musume: Load SQL Data [![Build status](https://ci.appveyor.com/api/projects/status/19skk0jwbcy4ogy7/branch/master?svg=true&passingText=deployment%20-%20OK&failingText=deployment%20-%20FAILED)](https://ci.appveyor.com/project/SimpleSandman/umamusumeloadsqldata/branch/master)
 
 This console app will take your DMM's `master.mdb` file and load it into either a MySQL/MariaDB or SQL Server database.
 
