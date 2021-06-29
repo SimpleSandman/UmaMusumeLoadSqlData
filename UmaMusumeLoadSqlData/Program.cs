@@ -23,14 +23,15 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
 
-        private static readonly string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
-
+        // Command-line arguments
         private static string _aspNetCoreEnvironment;
         private static string _repoName;
         private static string _branchName;
         private static string _mySqlConnectionString;
         private static string _sqlServerConnectionString;
 
+        private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
+        
         static void Main(string[] args)
         {
             _aspNetCoreEnvironment = args[0];
@@ -48,19 +49,27 @@ namespace UmaMusumeLoadSqlData
 
             try
             {
-                /* Download master.mdb file from remote GitHub repo */
-                string rawUrl = $"https://raw.githubusercontent.com/{_repoName}/{_branchName}/master.mdb";
-
-                Console.WriteLine($"Downloading master.mdb from \"{_repoName}/{_branchName}\"...");
-
-                using (WebClient client = new WebClient())
+                if (_aspNetCoreEnvironment == "Development")
                 {
-                    client.Headers.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
-                    byte[] bytes = client.DownloadData(rawUrl);
-                    File.WriteAllBytes(_masterDbFilepath, bytes);
+                    _masterDbFilepath 
+                        = @$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\AppData\LocalLow\Cygames\umamusume\master\master.mdb";
                 }
+                else
+                {
+                    /* Download master.mdb file from remote GitHub repo */
+                    string rawUrl = $"https://raw.githubusercontent.com/{_repoName}/{_branchName}/master.mdb";
 
-                Console.WriteLine("SUCCESS: Downloaded master.mdb");
+                    Console.WriteLine($"Downloading master.mdb from \"{_repoName}/{_branchName}\"...");
+
+                    using (WebClient client = new WebClient())
+                    {
+                        client.Headers.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
+                        byte[] bytes = client.DownloadData(rawUrl);
+                        File.WriteAllBytes(_masterDbFilepath, bytes);
+                    }
+
+                    Console.WriteLine("SUCCESS: Downloaded master.mdb");
+                }
 
                 /* Verify master.mdb exists */
                 if (File.Exists(_masterDbFilepath))
