@@ -6,6 +6,7 @@ using System.Data.SQLite;
 using System.IO;
 using System.Linq;
 using System.Net;
+using System.Runtime.InteropServices;
 using System.Threading.Tasks;
 
 using MySqlConnector;
@@ -49,7 +50,7 @@ namespace UmaMusumeLoadSqlData
 
             try
             {
-                if (_aspNetCoreEnvironment == "Development")
+                if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     _masterDbFilepath 
                         = @$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\AppData\LocalLow\Cygames\umamusume\master\master.mdb";
@@ -167,7 +168,7 @@ namespace UmaMusumeLoadSqlData
 
                     foreach (DataTable sqliteDataTable in _sqliteDataTables.OrderBy(t => t.TableName))
                     {
-                        // Start wtih a clean slate
+                        // Start with a clean slate
                         using (U truncateCommand = new U())
                         {
                             truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}{sqliteDataTable.TableName}";
@@ -352,7 +353,7 @@ namespace UmaMusumeLoadSqlData
         #region Public Methods
         public static void CloseProgram()
         {
-            if (_aspNetCoreEnvironment == "Development")
+            if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 Console.WriteLine("\nPress any key to close this program...");
                 Console.ReadKey();

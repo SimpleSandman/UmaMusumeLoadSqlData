@@ -1,0 +1,31 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": ".NET Core Launch (console)",
+            "type": "coreclr",
+            "request": "launch",
+            "preLaunchTask": "build",
+            "justMyCode": false,
+            "program": "${workspaceFolder}/UmaMusumeLoadSqlData/bin/Debug/net5.0/UmaMusumeLoadSqlData.dll",
+            "args": [
+                "Development", 
+                "SimpleSandman/UmaMusumeMasterMDB", 
+                "master", 
+                "user id=root;password=sa;host=localhost;database=umamusume;character set=utf8mb4;AllowLoadLocalInfile=true", 
+                "N/A"
+            ],
+            "cwd": "${workspaceFolder}/UmaMusumeLoadSqlData",
+            "console": "internalConsole",
+            "stopAtEntry": false,
+            "logging": {
+                "moduleLoad": false
+            }
+        },
+        {
+            "name": ".NET Core Attach",
+            "type": "coreclr",
+            "request": "attach"
+        }
+    ]
+}
