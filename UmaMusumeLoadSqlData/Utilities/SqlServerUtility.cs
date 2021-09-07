@@ -91,7 +91,7 @@ namespace UmaMusumeLoadSqlData.Utilities
             {
                 if (!isFirstAttempt)
                 {
-                    Console.WriteLine($"\nERROR: Could not bulk insert for the table \"{tableName}\"");
+                    Console.WriteLine($"\nERROR: Could not bulk insert for the table \"{tableName}\"\n");
                     Console.WriteLine(ex.Message);
 
                     // Reference: https://sqlbulkcopy-tutorial.net/columnmapping-does-not-match

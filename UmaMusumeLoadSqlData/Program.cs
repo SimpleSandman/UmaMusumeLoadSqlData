@@ -219,6 +219,12 @@ namespace UmaMusumeLoadSqlData
                 List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
                 List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
 
+                if (destinationColumns == null)
+                {
+                    Console.WriteLine($"WARNING: Missing destination columns for table, \"{sqliteDataTable.TableName}\"");
+                    return false;
+                }
+
                 // Add missing columns
                 foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
                 {
@@ -262,7 +268,7 @@ namespace UmaMusumeLoadSqlData
                             addColumnCommand.ExecuteNonQuery();
                         }
 
-                        Console.WriteLine($"Successfully added missing column with script: \"{addColumn}\"\n");
+                        Console.WriteLine($"\nSuccessfully added missing column with script: \"{addColumn}\"");
                     }
                     catch (Exception ex)
                     {

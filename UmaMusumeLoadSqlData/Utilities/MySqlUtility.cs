@@ -38,7 +38,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                         {
                             ColumnName = reader.GetString(0),
                             ColumnDataType = reader.GetString(1),
-                            IsNullable = reader.GetBoolean(2)
+                            IsNullable = reader.GetString(2) == "YES"
                         });
                     }
                 }
@@ -94,13 +94,24 @@ namespace UmaMusumeLoadSqlData.Utilities
 
                 if (!isFirstAttempt)
                 {
-                    Console.WriteLine($"\nERROR: Could not bulk insert for the table \"{tableName}\"");
+                    Console.WriteLine($"\nERROR: Could not bulk insert for the table \"{tableName}\"\n");
                     Console.WriteLine(ex.Message);
 
                     // Reference: https://sqlbulkcopy-tutorial.net/columnmapping-does-not-match
                     if (!ex.Message.Contains("The given ColumnMapping does not match up with any column in the source or destination"))
                     {
-                        Console.WriteLine(ex.StackTrace);
+                        Console.WriteLine(ex.StackTrace + "\n");
+
+                        Console.WriteLine("\nPOSSIBLE SOLUTION: Compare and match the column ordering between the \"DataTable\" variable and destination table.");
+                        if (dataTable != null)
+                        {
+                            Console.WriteLine($"\nDataTable info for \"{tableName}\"");
+                            foreach (DataColumn column in dataTable.Columns)
+                            {
+                                Console.WriteLine($"Column Name: \"{column.ColumnName}\" | Data Type: {column.DataType.Name} | Is Nullable: {column.AllowDBNull}");
+                            }
+                            Console.WriteLine();
+                        }
                     }
                 }
             }
