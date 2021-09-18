@@ -3,11 +3,16 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Data.SQLite;
+using System.Globalization;
 using System.IO;
 using System.Linq;
-using System.Net;
+using System.Net.Http;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Threading.Tasks;
+
+using CsvHelper;
+using CsvHelper.Configuration;
 
 using MySqlConnector;
 
@@ -50,6 +55,7 @@ namespace UmaMusumeLoadSqlData
 
             try
             {
+                #region Bulk Database Refresh
                 if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     _masterDbFilepath 
@@ -57,25 +63,14 @@ namespace UmaMusumeLoadSqlData
                 }
                 else
                 {
-                    /* Download master.mdb file from remote GitHub repo */
-                    string rawUrl = $"https://raw.githubusercontent.com/{_repoName}/{_branchName}/master.mdb";
-
-                    Console.WriteLine($"Downloading master.mdb from \"{_repoName}/{_branchName}\"...");
-
-                    using (WebClient client = new WebClient())
-                    {
-                        client.Headers.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
-                        byte[] bytes = client.DownloadData(rawUrl);
-                        File.WriteAllBytes(_masterDbFilepath, bytes);
-                    }
-
-                    Console.WriteLine("SUCCESS: Downloaded master.mdb");
+                    // Download master.mdb file from remote GitHub repo
+                    GithubUtility.DownloadRemoteFile(_repoName, _branchName, "master.mdb", _masterDbFilepath);
                 }
 
                 /* Verify master.mdb exists */
                 if (File.Exists(_masterDbFilepath))
                 {
-                    Console.WriteLine("SUCCESS: Found master.mdb");
+                    Console.WriteLine("SUCCESS: Found master.mdb\n");
                 }
                 else
                 {
@@ -95,7 +90,7 @@ namespace UmaMusumeLoadSqlData
                     _sqliteUtility.LoadSqliteDataTables(connection, _sqliteTableNames, _sqliteDataTables);
                 }
 
-                /* Import data from SQLite into the provided databases below */
+                /* Import data from SQLite into the provided database(s) below */
                 if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
                 {
                     await SqlDestination<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
@@ -105,7 +100,56 @@ namespace UmaMusumeLoadSqlData
                 {
                     await SqlDestination<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
                 }
+                #endregion
 
+                #region English Translation Refresh
+                using (HttpClient client = new HttpClient())
+                {
+                    string repoName = "FabulousCupcake/umamusume-db-translate";
+                    string branchName = "master";
+                    string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
+                    GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
+
+                    List<Tree> translatedCsvs = response.Trees.FindAll(file => file.Path.Contains("src/data/") && file.Path.Contains(".csv"));
+
+                    Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data"); // prepare storage
+                    
+                    foreach (Tree tree in translatedCsvs)
+                    {
+                        string localFilepath = @$"{Environment.CurrentDirectory}/{tree.Path}";
+
+                        GithubUtility.DownloadRemoteFile(repoName, branchName, tree.Path, localFilepath);
+
+                        /* Load CSV into a DataTable */
+                        CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
+                        {
+                            BadDataFound = null
+                        };
+
+                        using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                        {
+                            using (CsvReader csv = new CsvReader(reader, config))
+                            {
+                                using (CsvDataReader dr = new CsvDataReader(csv))
+                                {
+                                    DataTable dt = new DataTable();
+                                    dt.Load(dr);
+
+                                    // Test load
+                                    foreach (DataRow row in dt.Select())
+                                    {
+                                        Console.WriteLine();
+                                        Console.WriteLine(row[0].ToString());
+                                        Console.WriteLine(row[1].ToString());
+                                    }
+
+                                    // TODO: Create INSERT query for the translation table
+                                }
+                            }
+                        }
+                    }
+                };
+                #endregion
             }
             catch (Exception ex)
             {
@@ -357,7 +401,7 @@ namespace UmaMusumeLoadSqlData
         #endregion
 
         #region Public Methods
-        public static void CloseProgram()
+        public static void CloseProgram(int exitCode = 0)
         {
             if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
@@ -370,7 +414,7 @@ namespace UmaMusumeLoadSqlData
                 Console.WriteLine("Exiting now...");
             }
             
-            Environment.Exit(0);
+            Environment.Exit(exitCode);
         }
         #endregion
     }
