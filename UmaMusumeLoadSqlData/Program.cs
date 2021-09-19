@@ -28,6 +28,7 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
+        private static bool _hadBulkInsertError = false;
 
         // Command-line arguments
         private static string _aspNetCoreEnvironment;
@@ -55,7 +56,6 @@ namespace UmaMusumeLoadSqlData
 
             try
             {
-                #region Bulk Database Refresh
                 if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     _masterDbFilepath 
@@ -70,7 +70,7 @@ namespace UmaMusumeLoadSqlData
                 /* Verify master.mdb exists */
                 if (File.Exists(_masterDbFilepath))
                 {
-                    Console.WriteLine("SUCCESS: Found master.mdb\n");
+                    Console.WriteLine("SUCCESS: Found master.mdb");
                 }
                 else
                 {
@@ -94,62 +94,24 @@ namespace UmaMusumeLoadSqlData
                 if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
                 {
                     await SqlDestination<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
+                    await LoadEnglishTranslationsAsync<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
                 }
 
                 if (!string.IsNullOrEmpty(_sqlServerConnectionString) && _sqlServerConnectionString != "N/A")
                 {
                     await SqlDestination<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
+                    await LoadEnglishTranslationsAsync<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
                 }
-                #endregion
 
-                #region English Translation Refresh
-                using (HttpClient client = new HttpClient())
+                // Provide special output per error
+                if (_hadBulkInsertError)
                 {
-                    string repoName = "FabulousCupcake/umamusume-db-translate";
-                    string branchName = "master";
-                    string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
-                    GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
-
-                    List<Tree> translatedCsvs = response.Trees.FindAll(file => file.Path.Contains("src/data/") && file.Path.Contains(".csv"));
-
-                    Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data"); // prepare storage
-                    
-                    foreach (Tree tree in translatedCsvs)
-                    {
-                        string localFilepath = @$"{Environment.CurrentDirectory}/{tree.Path}";
-
-                        GithubUtility.DownloadRemoteFile(repoName, branchName, tree.Path, localFilepath);
-
-                        /* Load CSV into a DataTable */
-                        CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
-                        {
-                            BadDataFound = null
-                        };
-
-                        using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
-                        {
-                            using (CsvReader csv = new CsvReader(reader, config))
-                            {
-                                using (CsvDataReader dr = new CsvDataReader(csv))
-                                {
-                                    DataTable dt = new DataTable();
-                                    dt.Load(dr);
-
-                                    // Test load
-                                    foreach (DataRow row in dt.Select())
-                                    {
-                                        Console.WriteLine();
-                                        Console.WriteLine(row[0].ToString());
-                                        Console.WriteLine(row[1].ToString());
-                                    }
-
-                                    // TODO: Create INSERT query for the translation table
-                                }
-                            }
-                        }
-                    }
-                };
-                #endregion
+                    Console.WriteLine("\nWARNING: Table reload successful, but has bulk insert errors.");
+                }
+                else
+                {
+                    Console.WriteLine("\nSUCCESS: Table reload successful!");
+                }
             }
             catch (Exception ex)
             {
@@ -208,8 +170,6 @@ namespace UmaMusumeLoadSqlData
                         _sqliteDataTables.RemoveAll(t => _sqliteTableNames.Any(n => n.TableName == t.TableName));
                     }
 
-                    bool hadBulkInsertError = false;
-
                     foreach (DataTable sqliteDataTable in _sqliteDataTables.OrderBy(t => t.TableName))
                     {
                         // Start with a clean slate
@@ -224,25 +184,14 @@ namespace UmaMusumeLoadSqlData
                         if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable))
                         {
                             // Look at the SQLite table and find the missing columns for the destination table
-                            hadBulkInsertError = AreMissingColumnsResolved<T, U>(destinationConnection, sqliteDataTable, tableSchema);
+                            _hadBulkInsertError = AreMissingColumnsResolved<T, U>(destinationConnection, sqliteDataTable, tableSchema);
 
                             // Try to insert again with the newly added columns
                             if (!await TryBulkInsertDataTableAsync(destinationConnection, sqliteDataTable.TableName, sqliteDataTable, false))
                             {
-                                hadBulkInsertError = true;
+                                _hadBulkInsertError = true;
                             }
                         }
-                    }
-
-                    // Provide special output per error
-                    if (hadBulkInsertError)
-                    {
-                        Console.WriteLine("\nWARNING: Raw table reload successful, but has bulk insert errors.");
-                        Console.WriteLine("Please read the error messages as these tables are currently empty.");
-                    }
-                    else
-                    {
-                        Console.WriteLine("\nSUCCESS: Raw table reload successful!");
                     }
                 }
             }
@@ -329,6 +278,97 @@ namespace UmaMusumeLoadSqlData
             }
 
             return false;
+        }
+
+        private static async Task LoadEnglishTranslationsAsync<T, U>(string connectionString) 
+            where T : IDbConnection, new()
+            where U : IDbCommand, new()
+        {
+            using (HttpClient client = new HttpClient())
+            {
+                string repoName = "FabulousCupcake/umamusume-db-translate";
+                string branchName = "master";
+                string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
+                GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
+
+                List<Tree> translatedCsvs = response.Trees.FindAll(file => file.Path.Contains("src/data/") && file.Path.Contains(".csv"));
+
+                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data"); // prepare storage
+
+                using (T destinationConnection = new T())
+                {
+                    destinationConnection.ConnectionString = connectionString;
+                    destinationConnection.Open();
+
+                    using (U truncateCommand = new U())
+                    {
+                        // MSSQL uses a separate schema name than the database
+                        string tableSchema = "dbo.";
+                        if (typeof(T) == typeof(MySqlConnection))
+                        {
+                            tableSchema = "";
+                        }
+
+                        // Start with a clean slate
+                        truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}text_data_english";
+                        truncateCommand.Connection = destinationConnection;
+                        truncateCommand.ExecuteNonQuery();
+
+                        foreach (Tree tree in translatedCsvs)
+                        {
+                            string localFilepath = @$"{Environment.CurrentDirectory}/{tree.Path}";
+
+                            GithubUtility.DownloadRemoteFile(repoName, branchName, tree.Path, localFilepath);
+
+                            /* Load CSV into a DataTable */
+                            CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
+                            {
+                                BadDataFound = null
+                            };
+
+                            using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                            {
+                                using (CsvReader csv = new CsvReader(reader, config))
+                                {
+                                    using (CsvDataReader dr = new CsvDataReader(csv))
+                                    {
+                                        DataTable dataTable = new DataTable();
+
+                                        try
+                                        {
+                                            dataTable.Load(dr);
+                                        }
+                                        catch (CsvHelperException ex)
+                                        {
+                                            // move onto the next .csv
+                                            _hadBulkInsertError = true;
+                                            Console.WriteLine(ex.Message);
+
+                                            continue;
+                                        }
+
+                                        if (dataTable.Columns.Count != 2)
+                                        {
+                                            Console.WriteLine($"ERROR: Incorrect column count for \"{tree.Path}\". "
+                                                + $"Found {dataTable.Columns.Count} column(s)");
+
+                                            // move onto the next .csv
+                                            _hadBulkInsertError = true;
+                                            continue;
+                                        }
+
+                                        /* Push new info into destination database */
+                                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
+                                        {
+                                            _hadBulkInsertError = true;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            };
         }
 
         private static List<string> SelectTableNames<T>(T connection) where T : IDbConnection

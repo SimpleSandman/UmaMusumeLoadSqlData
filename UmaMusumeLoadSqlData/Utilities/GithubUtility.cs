@@ -21,7 +21,7 @@ namespace UmaMusumeLoadSqlData.Utilities
         {
             string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/{sourceFilepath}";
 
-            Console.WriteLine($"Downloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
+            Console.WriteLine($"\nDownloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
 
             using (WebClient client = new WebClient())
             {

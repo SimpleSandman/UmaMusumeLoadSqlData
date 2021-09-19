@@ -78,7 +78,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                 };
 
                 await bulkCopy.WriteToServerAsync(dataTable);
-                Console.WriteLine($"Successfully loaded {tableName}");
+                Console.WriteLine($"Successfully loaded rows into \"{tableName}\"");
 
                 return true;
             }

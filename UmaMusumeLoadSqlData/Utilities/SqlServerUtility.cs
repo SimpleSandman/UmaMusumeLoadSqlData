@@ -72,18 +72,23 @@ namespace UmaMusumeLoadSqlData.Utilities
         public async Task<bool> TryBulkInsertDataTableAsync(SqlConnection connection, string tableName, DataTable dataTable, bool isFirstAttempt = true)
         {
             tableName = $"RawData.{tableName}";
+            if (tableName == "text_data_english")
+            {
+                tableName = $"dbo.{tableName}";
+            }
 
             try
             {
                 SqlBulkCopy bulkCopy = new SqlBulkCopy(connection,
                     SqlBulkCopyOptions.TableLock
                         | SqlBulkCopyOptions.FireTriggers
-                        | SqlBulkCopyOptions.UseInternalTransaction,
+                        | SqlBulkCopyOptions.UseInternalTransaction
+                        | SqlBulkCopyOptions.KeepIdentity,
                     null);
                 bulkCopy.DestinationTableName = tableName;
 
                 await bulkCopy.WriteToServerAsync(dataTable);
-                Console.WriteLine($"Successfully loaded {tableName}");
+                Console.WriteLine($"Successfully loaded rows into \"{tableName}\"");
 
                 return true;
             }
