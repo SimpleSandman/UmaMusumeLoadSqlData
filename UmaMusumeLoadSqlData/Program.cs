@@ -323,7 +323,8 @@ namespace UmaMusumeLoadSqlData
                             /* Load CSV into a DataTable */
                             CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
                             {
-                                BadDataFound = null
+                                BadDataFound = null,
+                                MissingFieldFound = null
                             };
 
                             using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
