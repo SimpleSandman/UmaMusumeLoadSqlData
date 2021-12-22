@@ -64,7 +64,7 @@ namespace UmaMusumeLoadSqlData
                 else
                 {
                     // Download master.mdb file from remote GitHub repo
-                    GithubUtility.DownloadRemoteFile(_repoName, _branchName, "master.mdb", _masterDbFilepath);
+                    await GithubUtility.DownloadRemoteFileAsync(_repoName, _branchName, "master.mdb", _masterDbFilepath);
                 }
 
                 /* Verify master.mdb exists */
@@ -320,7 +320,7 @@ namespace UmaMusumeLoadSqlData
                         {
                             string localFilepath = @$"{Environment.CurrentDirectory}/{tree.Path}";
 
-                            GithubUtility.DownloadRemoteFile(repoName, branchName, tree.Path, localFilepath);
+                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, tree.Path, localFilepath);
 
                             /* Load CSV into a DataTable */
                             CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
