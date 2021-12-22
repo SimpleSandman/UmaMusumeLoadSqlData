@@ -159,14 +159,14 @@ namespace UmaMusumeLoadSqlData
                     if (_sqliteTableNames.Count > 0)
                     {
                         Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
-                        Console.WriteLine("-------------------------------------------------------------------------------");
+                        Console.WriteLine("--------------------------------------------------------");
                         
                         foreach (SqliteMasterRecord table in _sqliteTableNames)
                         {
                             Console.WriteLine(table.SqlScript);
                         }
 
-                        Console.WriteLine("-------------------------------------------------------------------------------\n");
+                        Console.WriteLine("--------------------------------------------------------\n");
 
                         // Remove sqliteDataTables that don't exist in the destination table yet
                         _sqliteDataTables.RemoveAll(t => _sqliteTableNames.Any(n => n.TableName == t.TableName));
