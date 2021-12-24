@@ -16,14 +16,15 @@ using CsvHelper.Configuration;
 
 using MySqlConnector;
 
-using UmaMusumeLoadSqlData.Utilities;
 using UmaMusumeLoadSqlData.Models;
+using UmaMusumeLoadSqlData.Utilities;
 
 namespace UmaMusumeLoadSqlData
 {
     public class Program
     {
         private static readonly List<SqliteMasterRecord> _sqliteTableNames = new List<SqliteMasterRecord>();
+        private static readonly List<SqliteMasterRecord> _sqliteIndexNames = new List<SqliteMasterRecord>();
         private static readonly List<DataTable> _sqliteDataTables = new List<DataTable>();
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
@@ -85,6 +86,9 @@ namespace UmaMusumeLoadSqlData
 
                     // Get raw data table names needed to loop
                     _sqliteUtility.SqliteTableNames(connection, _sqliteTableNames);
+
+                    // Get raw data index names needed to loop
+                    _sqliteUtility.SqliteIndexScript(connection, _sqliteIndexNames);
 
                     // Loop through each table and pull all available data
                     _sqliteUtility.LoadSqliteDataTables(connection, _sqliteTableNames, _sqliteDataTables);
@@ -155,18 +159,33 @@ namespace UmaMusumeLoadSqlData
                         _sqliteTableNames.RemoveAll(t => t.TableName == name);
                     }
 
-                    // Alert the owner of any new tables
+                    // Alert the owner of any new tables with their indexes
                     if (_sqliteTableNames.Count > 0)
                     {
-                        Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file");
-                        Console.WriteLine("--------------------------------------------------------");
-                        
+                        Console.WriteLine($"WARNING: {_sqliteTableNames.Count} new table(s) found from the master.mdb file...");
+                        Console.WriteLine("-----------------------------------------------------------");
+
+                        // NOTE: Local dev strings used and displayed
+                        string scaffoldContent = "Scaffold-DbContext 'User Id=root;Password=sa;Host=localhost;Database=umamusume;Character Set=utf8mb4' "
+                                + $"Pomelo.EntityFrameworkCore.MySql -OutputDir Models -ContextDir Context -T ";
+
                         foreach (SqliteMasterRecord table in _sqliteTableNames)
                         {
-                            Console.WriteLine(table.SqlScript);
+                            Console.WriteLine();
+
+                            Console.WriteLine($"{table.SqlScript};");
+                            foreach (SqliteMasterRecord index in _sqliteIndexNames.Where(i => i.TableName == table.TableName))
+                            {
+                                Console.WriteLine($"{index.SqlScript};");
+                            }
+
+                            scaffoldContent += $"{table.TableName},";
                         }
 
-                        Console.WriteLine("--------------------------------------------------------\n");
+                        // Script the model creator needed for the API using Scaffold-DbContext
+                        Console.WriteLine("\n-----------------------------------------------------------\n");
+                        Console.WriteLine(scaffoldContent[0..^1]);
+                        Console.WriteLine("\n-----------------------------------------------------------\n");
 
                         // Remove sqliteDataTables that don't exist in the destination table yet
                         _sqliteDataTables.RemoveAll(t => _sqliteTableNames.Any(n => n.TableName == t.TableName));

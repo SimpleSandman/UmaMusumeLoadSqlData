@@ -3,8 +3,8 @@ using System.Data;
 using System.Data.SQLite;
 using System.Linq;
 
-using UmaMusumeLoadSqlData.Utilities.Interfaces;
 using UmaMusumeLoadSqlData.Models;
+using UmaMusumeLoadSqlData.Utilities.Interfaces;
 
 namespace UmaMusumeLoadSqlData.Utilities
 {
@@ -73,6 +73,30 @@ namespace UmaMusumeLoadSqlData.Utilities
                             { 
                                 TableName = tableName, 
                                 SqlScript = reader.GetString(1) 
+                            });
+                        }
+                    }
+                }
+            }
+        }
+
+        public void SqliteIndexScript(SQLiteConnection connection, List<SqliteMasterRecord> sqliteIndexNames)
+        {
+            using (SQLiteCommand indexNameCommand = connection.CreateCommand())
+            {
+                indexNameCommand.CommandText = "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY tbl_name";
+
+                using (SQLiteDataReader reader = indexNameCommand.ExecuteReader())
+                {
+                    while (reader.Read())
+                    {
+                        string tableName = reader.GetString(0);
+                        if (tableName != "sqlite_stat1")
+                        {
+                            sqliteIndexNames.Add(new SqliteMasterRecord
+                            {
+                                TableName = tableName,
+                                SqlScript = reader.GetString(1)
                             });
                         }
                     }
