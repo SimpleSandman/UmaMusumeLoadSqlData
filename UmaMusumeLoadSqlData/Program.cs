@@ -9,6 +9,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
 using CsvHelper;
@@ -18,6 +19,7 @@ using MySqlConnector;
 
 using UmaMusumeLoadSqlData.Models;
 using UmaMusumeLoadSqlData.Utilities;
+using UmaMusumeLoadSqlData.Utilities.Extensions;
 
 namespace UmaMusumeLoadSqlData
 {
@@ -307,15 +309,38 @@ namespace UmaMusumeLoadSqlData
         {
             using (HttpClient client = new HttpClient())
             {
-                string repoName = "FabulousCupcake/umamusume-db-translate";
-                string branchName = "master";
+                string repoName = "noccu/umamusume-db-translate";
+                string branchName = "playtest";
                 string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
                 GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
 
-                List<Tree> translatedCsvs = response.Trees.FindAll(file => file.Path.Contains("src/data/") && file.Path.Contains(".csv"));
+                if (response == null)
+                {
+                    return; // cannot retrieve info
+                }
 
-                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data"); // prepare storage
+                // Get lists needed for retrieval
+                IEnumerable<string> githubResults = response.Trees
+                    .Where(file => file.Path.Contains("src/data/"))
+                    .Select(p => p.Path);
+                IEnumerable<string> translatedCsvs = githubResults.Where(file => file.Contains(".csv"));
+                IEnumerable<string> translatedJson = githubResults.Where(file => file.Contains(".json"));
+                IEnumerable<string> subDirectories = githubResults.Where(file => !file.Contains(".csv") && !file.Contains(".json"));
 
+                githubResults = null; // clean up
+
+                // prepare storage
+                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data");
+
+                if (subDirectories.Any())
+                {
+                    foreach (string directory in subDirectories)
+                    {
+                        Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/{directory}");
+                    }
+                }
+
+                // Load translations
                 using (T destinationConnection = new T())
                 {
                     destinationConnection.ConnectionString = connectionString;
@@ -335,11 +360,44 @@ namespace UmaMusumeLoadSqlData
                         truncateCommand.Connection = destinationConnection;
                         truncateCommand.ExecuteNonQuery();
 
-                        foreach (Tree tree in translatedCsvs)
+                        #region Translated JSONs
+                        foreach (string jsonPath in translatedJson)
                         {
-                            string localFilepath = @$"{Environment.CurrentDirectory}/{tree.Path}";
+                            string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
+                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, jsonPath, localFilepath);
 
-                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, tree.Path, localFilepath);
+                            using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                            {
+                                string json = reader.ReadToEnd();
+                                JsonObject jsonObject = JsonNode.Parse(json).AsObject();
+
+                                List<TranslatedJson> translatedList = new List<TranslatedJson>();
+                                foreach (KeyValuePair<string, JsonNode> node in jsonObject)
+                                {
+                                    translatedList.Add(new TranslatedJson
+                                    {
+                                        OriginalText = node.Key,
+                                        TranslatedText = node.Value.ToString()
+                                    });
+                                }
+
+                                using (DataTable dataTable = translatedList.ToDataTable())
+                                {
+                                    /* Push new info into destination database */
+                                    if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
+                                    {
+                                        _hadBulkInsertError = true;
+                                    }
+                                }
+                            }
+                        }
+                        #endregion
+
+                        #region Translated CSVs
+                        foreach (string path in translatedCsvs)
+                        {
+                            string localFilepath = @$"{Environment.CurrentDirectory}/{path}";
+                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, path, localFilepath);
 
                             /* Load CSV into a DataTable */
                             CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
@@ -371,7 +429,7 @@ namespace UmaMusumeLoadSqlData
 
                                         if (dataTable.Columns.Count != 2)
                                         {
-                                            Console.WriteLine($"ERROR: Incorrect column count for \"{tree.Path}\". "
+                                            Console.WriteLine($"ERROR: Incorrect column count for \"{path}\". "
                                                 + $"Found {dataTable.Columns.Count} column(s)");
 
                                             // move onto the next .csv
@@ -388,6 +446,7 @@ namespace UmaMusumeLoadSqlData
                                 }
                             }
                         }
+                        #endregion
                     }
                 }
             };
