@@ -99,13 +99,13 @@ namespace UmaMusumeLoadSqlData
                 /* Import data from SQLite into the provided database(s) below */
                 if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
                 {
-                    await SqlDestination<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
+                    await SqlDestinationAsync<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
                     await LoadEnglishTranslationsAsync<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
                 }
 
                 if (!string.IsNullOrEmpty(_sqlServerConnectionString) && _sqlServerConnectionString != "N/A")
                 {
-                    await SqlDestination<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
+                    await SqlDestinationAsync<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
                     await LoadEnglishTranslationsAsync<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
                 }
 
@@ -130,7 +130,7 @@ namespace UmaMusumeLoadSqlData
         }
 
         #region Private Methods
-        private static async Task SqlDestination<T, U>(string connectionString) 
+        private static async Task SqlDestinationAsync<T, U>(string connectionString) 
             where T : IDbConnection, new()
             where U : IDbCommand, new()
         {
@@ -254,7 +254,7 @@ namespace UmaMusumeLoadSqlData
                     if (missingColumn.ColumnDataType == "INTEGER")
                     {
                         // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
-                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} BIGINT {isNullable}";
+                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} INT {isNullable}";
                     }
                     else if (missingColumn.ColumnDataType == "TEXT")
                     {
@@ -498,18 +498,18 @@ namespace UmaMusumeLoadSqlData
             return null;
         }
 
-        private static async Task<bool> TryBulkInsertDataTableAsync<T>(T connection, string tableName, DataTable dataTable, bool isFirstAttempt = true)
+        private static async Task<bool> TryBulkInsertDataTableAsync<T>(T connection, string tableName, DataTable sourceDataTable, bool isFirstAttempt = true)
             where T : IDbConnection
         {
             try
             {
                 if (typeof(T) == typeof(SqlConnection))
                 {
-                    return await _sqlServerUtility.TryBulkInsertDataTableAsync(connection as SqlConnection, tableName, dataTable, isFirstAttempt);
+                    return await _sqlServerUtility.TryBulkInsertDataTableAsync(connection as SqlConnection, tableName, sourceDataTable, isFirstAttempt);
                 }
                 else if (typeof(T) == typeof(MySqlConnection))
                 {
-                    return await _mySqlUtility.TryBulkInsertDataTableAsync(connection as MySqlConnection, tableName, dataTable, isFirstAttempt);
+                    return await _mySqlUtility.TryBulkInsertDataTableAsync(connection as MySqlConnection, tableName, sourceDataTable, isFirstAttempt);
                 }
             }
             catch (Exception ex)

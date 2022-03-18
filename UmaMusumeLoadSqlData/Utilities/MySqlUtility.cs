@@ -68,7 +68,7 @@ namespace UmaMusumeLoadSqlData.Utilities
             return result;
         }
 
-        public async Task<bool> TryBulkInsertDataTableAsync(MySqlConnection connection, string tableName, DataTable dataTable, bool isFirstAttempt = true)
+        public async Task<bool> TryBulkInsertDataTableAsync(MySqlConnection connection, string tableName, DataTable sourceDataTable, bool isFirstAttempt = true)
         {
             try
             {
@@ -77,7 +77,21 @@ namespace UmaMusumeLoadSqlData.Utilities
                     DestinationTableName = tableName
                 };
 
-                await bulkCopy.WriteToServerAsync(dataTable);
+                // Ensure column order
+                foreach (DataColumn column in sourceDataTable.Columns)
+                {
+                    // Take care of every game table column order
+                    if (tableName != "text_data_english")
+                    {
+                        bulkCopy.ColumnMappings.Add(new MySqlBulkCopyColumnMapping
+                        {
+                            DestinationColumn = column.ColumnName,
+                            SourceOrdinal = sourceDataTable.Columns[column.ColumnName].Ordinal
+                        });
+                    }
+                }
+
+                await bulkCopy.WriteToServerAsync(sourceDataTable);
                 Console.WriteLine($"Successfully loaded rows into \"{tableName}\"");
 
                 return true;
@@ -103,10 +117,10 @@ namespace UmaMusumeLoadSqlData.Utilities
                         Console.WriteLine(ex.StackTrace + "\n");
 
                         Console.WriteLine("\nPOSSIBLE SOLUTION: Compare and match the column ordering between the \"DataTable\" variable and destination table.");
-                        if (dataTable != null)
+                        if (sourceDataTable != null)
                         {
                             Console.WriteLine($"\nDataTable info for \"{tableName}\"");
-                            foreach (DataColumn column in dataTable.Columns)
+                            foreach (DataColumn column in sourceDataTable.Columns)
                             {
                                 Console.WriteLine($"Column Name: \"{column.ColumnName}\" | Data Type: {column.DataType.Name} | Is Nullable: {column.AllowDBNull}");
                             }
