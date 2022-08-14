@@ -1,4 +1,4 @@
-﻿namespace UmaMusumeLoadSqlData.Models
+﻿namespace UmaMusumeLoadSqlData.Models.NoccuJson
 {
     public class TranslatedJson
     {

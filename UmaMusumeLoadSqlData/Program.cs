@@ -10,10 +10,10 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-
 using MySqlConnector;
 
 using UmaMusumeLoadSqlData.Models;
+using UmaMusumeLoadSqlData.Models.NoccuJson;
 using UmaMusumeLoadSqlData.Utilities;
 using UmaMusumeLoadSqlData.Utilities.Extensions;
 
@@ -319,12 +319,14 @@ namespace UmaMusumeLoadSqlData
                 IEnumerable<string> githubResults = response.Trees
                     .Where(file => file.Path.Contains("translations/"))
                     .Select(p => p.Path);
-                IEnumerable<string> translatedJson = githubResults.Where(file => file.Contains(".json"));
-                IEnumerable<string> subDirectories = githubResults.Where(file => !file.Contains(".json"));
+                IEnumerable<string> jsonFilePaths = githubResults.Where(file => file.Contains(".json"));
+                IEnumerable<string> subDirectories = githubResults.Where(directory => !directory.Contains(".json"));
 
-                githubResults = null; // clean up
+                // clean up
+                response = null;
+                githubResults = null;
 
-                // prepare storage
+                // Prepare file storage location
                 Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/translations");
 
                 if (subDirectories.Any())
@@ -350,13 +352,13 @@ namespace UmaMusumeLoadSqlData
                             tableSchema = "";
                         }
 
-                        // Start with a clean slate
+                        // Start "text_data_english" table with a clean slate
                         truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}text_data_english";
                         truncateCommand.Connection = destinationConnection;
                         truncateCommand.ExecuteNonQuery();
 
                         #region Translated JSONs
-                        foreach (string jsonPath in translatedJson)
+                        foreach (string jsonPath in jsonFilePaths)
                         {
                             string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
                             await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, jsonPath, localFilepath);
@@ -367,24 +369,69 @@ namespace UmaMusumeLoadSqlData
                                 JsonObject jsonObject = JsonNode.Parse(json).AsObject();
 
                                 List<TranslatedJson> translatedList = new List<TranslatedJson>();
-                                foreach (KeyValuePair<string, JsonNode> node in jsonObject)
+
+                                // Load translated JSON based on specified structures
+                                if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
                                 {
-                                    translatedList.Add(new TranslatedJson
+                                    foreach (KeyValuePair<string, JsonNode> node in jsonObject)
                                     {
-                                        OriginalText = node.Key,
-                                        TranslatedText = node.Value.ToString()
-                                    });
+                                        translatedList.Add(new TranslatedJson
+                                        {
+                                            OriginalText = node.Key,
+                                            TranslatedText = node.Value.ToString()
+                                        });
+                                    }
+                                }
+                                else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
+                                {
+                                    JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
+
+                                    foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                                    {
+                                        translatedList.Add(new TranslatedJson
+                                        {
+                                            OriginalText = node.Key,
+                                            TranslatedText = node.Value.ToString()
+                                        });
+                                    }
+                                }
+                                else
+                                {
+                                    JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
+                                    foreach (JsonNode nodeArray in textJsonArray)
+                                    {
+                                        IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
+                                            .Where(n => n.Key == "jpText" || n.Key == "enText");
+
+                                        TranslatedJson translatedJson = new TranslatedJson();
+                                        foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                                        {
+                                            if (node.Key == "jpText")
+                                            {
+                                                translatedJson.OriginalText = node.Value.ToString();
+                                            }
+                                            else
+                                            {
+                                                translatedJson.TranslatedText = node.Value.ToString();
+                                            }
+                                        }
+
+                                        translatedList.Add(translatedJson);
+                                    }
                                 }
 
                                 using (DataTable dataTable = translatedList.ToDataTable())
                                 {
-                                    /* Push new info into destination database */
+                                    // Push translated data into destination database
                                     if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
                                     {
                                         _hadBulkInsertError = true;
                                     }
                                 }
                             }
+
+                            File.Delete(localFilepath); // clean up
+                            Console.WriteLine($"Deleted \"{localFilepath}\"");
                         }
                         #endregion
                     }
