@@ -371,7 +371,6 @@ namespace UmaMusumeLoadSqlData
                             truncateCommand.ExecuteNonQuery();
                         }
 
-                        List<Task> downloadTasks = new List<Task>();
                         _dataTable.Columns.Add("OriginalText");
                         _dataTable.Columns.Add("TranslatedText");
                         int numFiles = 0;
@@ -389,7 +388,6 @@ namespace UmaMusumeLoadSqlData
                             }
                         }
 
-                        Task.WaitAll(downloadTasks.ToArray()); // finish final downloads
                         Console.WriteLine("Finished downloading JSON files");
 
                         // Push translated data into destination database
