@@ -460,6 +460,11 @@ namespace UmaMusumeLoadSqlData
                                 }
                             }
 
+                            if (string.IsNullOrEmpty(dr["OriginalText"].ToString()))
+                            {
+                                continue; // skip missing key
+                            }
+
                             _dataTable.Rows.Add(dr);
                         }
                     }
