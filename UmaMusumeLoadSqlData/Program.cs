@@ -20,6 +20,7 @@ namespace UmaMusumeLoadSqlData
 {
     public class Program
     {
+        #region Private Class Variables
         private static readonly List<SqliteMasterRecord> _sqliteTableNames = new List<SqliteMasterRecord>();
         private static readonly List<SqliteMasterRecord> _sqliteIndexNames = new List<SqliteMasterRecord>();
         private static readonly List<DataTable> _sqliteDataTables = new List<DataTable>();
@@ -28,18 +29,19 @@ namespace UmaMusumeLoadSqlData
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
         private static DataTable _dataTable = new DataTable();
         private static bool _hadBulkInsertError = false;
+        private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
+        private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
+        private const string TRANSLATED_BRANCH_NAME = "master";
+        #endregion
 
-        // Command-line arguments
+        #region Command Line Arg Class Variables
         public static string AspNetCoreEnvironment { get; private set; }
         private static string _repoName;
         private static string _branchName;
         private static string _mySqlConnectionString;
         private static string _sqlServerConnectionString;
+        #endregion
 
-        private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
-        private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
-        private const string TRANSLATED_BRANCH_NAME = "master";
-        
         static void Main(string[] args)
         {
             AspNetCoreEnvironment = args[0];
@@ -51,6 +53,7 @@ namespace UmaMusumeLoadSqlData
             MainAsync().GetAwaiter().GetResult();
         }
 
+        #region Actual Main Method
         static async Task MainAsync()
         {
             Console.WriteLine($">>> Now running in \"{AspNetCoreEnvironment}\" <<<\n");
@@ -126,6 +129,7 @@ namespace UmaMusumeLoadSqlData
                 CloseProgram();
             }
         }
+        #endregion
 
         #region Private Methods
         private static async Task SqlDestinationAsync<T, U>(string connectionString) 
