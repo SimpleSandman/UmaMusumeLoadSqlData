@@ -18,18 +18,32 @@ namespace UmaMusumeLoadSqlData.Utilities
         /// <param name="destinationFilepath">File path for the destination file</param>
         public static async Task DownloadRemoteFileAsync(string repoName, string branchName, string sourceFilepath, string destinationFilepath)
         {
-            string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/{sourceFilepath}";
-
-            Console.WriteLine($"\nDownloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
-
-            using (HttpClient client = new HttpClient())
+            try
             {
-                client.DefaultRequestHeaders.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
-                byte[] bytes = await client.GetByteArrayAsync(rawUrl);
-                File.WriteAllBytes(destinationFilepath, bytes);
-            }
+                sourceFilepath = sourceFilepath.Replace("#", "%23"); // URL encoding (since it was found in one of the file's names)
+                string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/{sourceFilepath}";
 
-            Console.WriteLine($"SUCCESS: Downloaded \"{sourceFilepath}\" to \"{destinationFilepath}\"");
+                if (Program.AspNetCoreEnvironment == "Development")
+                {
+                    Console.WriteLine($"\nDownloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
+                }
+
+                using (HttpClient client = new HttpClient())
+                {
+                    client.DefaultRequestHeaders.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
+                    byte[] bytes = await client.GetByteArrayAsync(rawUrl);
+                    File.WriteAllBytes(destinationFilepath, bytes);
+                }
+
+                if (Program.AspNetCoreEnvironment == "Development")
+                {
+                    Console.WriteLine($"SUCCESS: Downloaded \"{sourceFilepath}\" to \"{destinationFilepath}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
 
         /// <summary>

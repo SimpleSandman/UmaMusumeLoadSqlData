@@ -10,12 +10,11 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
+
 using MySqlConnector;
 
 using UmaMusumeLoadSqlData.Models;
-using UmaMusumeLoadSqlData.Models.NoccuJson;
 using UmaMusumeLoadSqlData.Utilities;
-using UmaMusumeLoadSqlData.Utilities.Extensions;
 
 namespace UmaMusumeLoadSqlData
 {
@@ -27,22 +26,23 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
+        private static DataTable _dataTable = new DataTable();
         private static bool _hadBulkInsertError = false;
 
         // Command-line arguments
-        private static string _aspNetCoreEnvironment;
+        public static string AspNetCoreEnvironment { get; private set; }
         private static string _repoName;
         private static string _branchName;
         private static string _mySqlConnectionString;
         private static string _sqlServerConnectionString;
 
         private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
-        private static string _translatedRepoName = "noccu/umamusu-translate";
-        private static string _translatedBranchName = "master";
+        private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
+        private const string TRANSLATED_BRANCH_NAME = "master";
         
         static void Main(string[] args)
         {
-            _aspNetCoreEnvironment = args[0];
+            AspNetCoreEnvironment = args[0];
             _repoName = args[1];
             _branchName = args[2];
             _mySqlConnectionString = args[3];
@@ -53,11 +53,11 @@ namespace UmaMusumeLoadSqlData
 
         static async Task MainAsync()
         {
-            Console.WriteLine($">>> Now running in \"{_aspNetCoreEnvironment}\" <<<\n");
+            Console.WriteLine($">>> Now running in \"{AspNetCoreEnvironment}\" <<<\n");
 
             try
             {
-                if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+                if (AspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
                 {
                     _masterDbFilepath 
                         = @$"{Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)}\AppData\LocalLow\Cygames\umamusume\master\master.mdb";
@@ -226,76 +226,83 @@ namespace UmaMusumeLoadSqlData
             where T : IDbConnection, new()
             where U : IDbCommand, new()
         {
-            using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
+            try
             {
-                sqliteDebugConnection.Open();
-
-                List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
-                List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
-
-                if (destinationColumns == null)
+                using (SQLiteConnection sqliteDebugConnection = new SQLiteConnection($"Data Source={_masterDbFilepath}"))
                 {
-                    Console.WriteLine($"WARNING: Missing destination columns for table, \"{sqliteDataTable.TableName}\"");
-                    return false;
-                }
+                    sqliteDebugConnection.Open();
 
-                // Add missing columns
-                foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
-                {
-                    string isNullable = "NOT NULL";
-                    if (missingColumn.IsNullable)
+                    List<ColumnMetadata> sqliteColumns = SelectColumnMetadata(sqliteDebugConnection, sqliteDataTable.TableName);
+                    List<ColumnMetadata> destinationColumns = SelectColumnMetadata(destinationConnection, sqliteDataTable.TableName);
+
+                    if (destinationColumns == null)
                     {
-                        isNullable = "NULL";
+                        Console.WriteLine($"WARNING: Missing destination columns for table, \"{sqliteDataTable.TableName}\"");
+                        return false;
                     }
 
-                    string addColumn = "";
-                    if (missingColumn.ColumnDataType == "INTEGER")
+                    // Add missing columns
+                    foreach (ColumnMetadata missingColumn in sqliteColumns.Where(lite => !destinationColumns.Exists(s => s.ColumnName == lite.ColumnName)))
                     {
-                        // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
-                        addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} INT {isNullable}";
-                    }
-                    else if (missingColumn.ColumnDataType == "TEXT")
-                    {
-                        if (typeof(U) == typeof(MySqlCommand))
+                        string isNullable = "NOT NULL";
+                        if (missingColumn.IsNullable)
                         {
-                            // NOTE: Make sure MySQL database is set to "utf8mb4" character set
-                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
+                            isNullable = "NULL";
+                        }
+
+                        string addColumn = "";
+                        if (missingColumn.ColumnDataType == "INTEGER")
+                        {
+                            // Reference: https://stackoverflow.com/a/7337945/2113548 (similar issue for SQLite's TEXT)
+                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} INT {isNullable}";
+                        }
+                        else if (missingColumn.ColumnDataType == "TEXT")
+                        {
+                            if (typeof(U) == typeof(MySqlCommand))
+                            {
+                                // NOTE: Make sure MySQL database is set to "utf8mb4" character set
+                                addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} TEXT {isNullable}";
+                            }
+                            else
+                            {
+                                addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
+                            }
                         }
                         else
                         {
-                            addColumn = $"ALTER TABLE {tableSchema}{sqliteDataTable.TableName} ADD {missingColumn.ColumnName} NVARCHAR(4000) {isNullable}";
+                            Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
+                            CloseProgram();
                         }
-                    }
-                    else
-                    {
-                        Console.WriteLine($"ERROR: Unable to handle SQLite datatype: {missingColumn.ColumnDataType}");
-                        CloseProgram();
-                    }
 
-                    // Try to add the missing columns
-                    try
-                    {
-                        using (U addColumnCommand = new U())
+                        // Try to add the missing columns
+                        try
                         {
-                            addColumnCommand.CommandText = addColumn;
-                            addColumnCommand.Connection = destinationConnection;
-                            addColumnCommand.ExecuteNonQuery();
+                            using (U addColumnCommand = new U())
+                            {
+                                addColumnCommand.CommandText = addColumn;
+                                addColumnCommand.Connection = destinationConnection;
+                                addColumnCommand.ExecuteNonQuery();
+                            }
+
+                            Console.WriteLine($"\nSuccessfully added missing column with script: \"{addColumn}\"");
                         }
-
-                        Console.WriteLine($"\nSuccessfully added missing column with script: \"{addColumn}\"");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"\nERROR: {ex.Message}");
-
-                        if (string.IsNullOrEmpty(addColumn))
+                        catch (Exception ex)
                         {
-                            Console.WriteLine($"SQL Command: {addColumn}");
-                        }
+                            Console.WriteLine($"\nERROR: {ex.Message}");
 
-                        return true;
+                            if (string.IsNullOrEmpty(addColumn))
+                            {
+                                Console.WriteLine($"SQL Command: {addColumn}");
+                            }
+
+                            return true;
+                        }
                     }
                 }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
 
             return false;
@@ -305,89 +312,117 @@ namespace UmaMusumeLoadSqlData
             where T : IDbConnection, new()
             where U : IDbCommand, new()
         {
-            using (HttpClient client = new HttpClient())
+            try
             {
-                string uri = $"https://api.github.com/repos/{_translatedRepoName}/git/trees/{_translatedBranchName}?recursive=1";
-                GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
-
-                if (response == null)
+                using (HttpClient client = new HttpClient())
                 {
-                    return; // cannot retrieve info
-                }
+                    string uri = $"https://api.github.com/repos/{TRANSLATED_REPO_NAME}/git/trees/{TRANSLATED_BRANCH_NAME}?recursive=1";
+                    GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
 
-                // Get lists needed for retrieval
-                IEnumerable<string> githubResults = response.Trees
-                    .Where(file => file.Path.Contains("translations/"))
-                    .Select(p => p.Path);
-                IEnumerable<string> jsonFilePaths = githubResults.Where(file => file.Contains(".json"));
-                IEnumerable<string> subDirectories = githubResults.Where(directory => !directory.Contains(".json"));
-
-                // clean up
-                response = null;
-                githubResults = null;
-
-                // Prepare file storage location
-                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/translations");
-
-                if (subDirectories.Any())
-                {
-                    foreach (string directory in subDirectories)
+                    if (response == null)
                     {
-                        Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/{directory}");
+                        return; // cannot retrieve info
                     }
-                }
 
-                // Load translations
-                using (T destinationConnection = new T())
-                {
-                    destinationConnection.ConnectionString = connectionString;
-                    destinationConnection.Open();
+                    // Get lists needed for retrieval
+                    IEnumerable<string> githubResults = response.Trees
+                        .Where(file => file.Path.Contains("translations/"))
+                        .Select(p => p.Path);
+                    IEnumerable<string> jsonFilePaths = githubResults.Where(file => file.Contains(".json"));
+                    IEnumerable<string> subDirectories = githubResults.Where(directory => !directory.Contains(".json"));
 
-                    using (U truncateCommand = new U())
+                    // clean up
+                    response = null;
+                    githubResults = null;
+
+                    // Prepare file storage location
+                    Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/translations");
+
+                    if (subDirectories.Any())
                     {
-                        // MSSQL uses a separate schema name than the database
-                        string tableSchema = "dbo.";
-                        if (typeof(T) == typeof(MySqlConnection))
+                        foreach (string directory in subDirectories)
                         {
-                            tableSchema = "";
+                            Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/{directory}");
+                        }
+                    }
+
+                    // Load translations
+                    using (T destinationConnection = new T())
+                    {
+                        destinationConnection.ConnectionString = connectionString;
+                        destinationConnection.Open();
+
+                        using (U truncateCommand = new U())
+                        {
+                            // MSSQL uses a separate schema name than the database
+                            string tableSchema = "dbo.";
+                            if (typeof(T) == typeof(MySqlConnection))
+                            {
+                                tableSchema = "";
+                            }
+
+                            // Start "text_data_english" table with a clean slate
+                            truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}text_data_english";
+                            truncateCommand.Connection = destinationConnection;
+                            truncateCommand.ExecuteNonQuery();
                         }
 
-                        // Start "text_data_english" table with a clean slate
-                        truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}text_data_english";
-                        truncateCommand.Connection = destinationConnection;
-                        truncateCommand.ExecuteNonQuery();
+                        List<Task> downloadTasks = new List<Task>();
+                        _dataTable.Columns.Add("OriginalText");
+                        _dataTable.Columns.Add("TranslatedText");
+                        int numFiles = 0;
 
-                        await LoadTranslatedJsonsAsync(jsonFilePaths, destinationConnection);
+                        Console.WriteLine("\nStarted downloading JSON files...");
+
+                        foreach (string jsonPath in jsonFilePaths)
+                        {
+                            await DownloadTranslatedJsonFilesAsync(jsonPath);
+                            numFiles++;
+
+                            if (numFiles % 20 == 0)
+                            {
+                                Console.WriteLine($"Downloaded {numFiles} of {jsonFilePaths.Count()} files");
+                            }
+                        }
+
+                        Task.WaitAll(downloadTasks.ToArray()); // finish final downloads
+                        Console.WriteLine("Finished downloading JSON files");
+
+                        // Push translated data into destination database
+                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", _dataTable, false))
+                        {
+                            _hadBulkInsertError = true;
+                        }
                     }
-                }
-            };
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
+            }
         }
 
-        private static async Task LoadTranslatedJsonsAsync<T>(IEnumerable<string> jsonFilePaths, T destinationConnection)
-            where T : IDbConnection, new()
+        private static async Task DownloadTranslatedJsonFilesAsync(string jsonPath)
         {
-            foreach (string jsonPath in jsonFilePaths)
+            try
             {
                 string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
-                await GithubUtility.DownloadRemoteFileAsync(_translatedRepoName, _translatedBranchName, jsonPath, localFilepath);
+                await GithubUtility.DownloadRemoteFileAsync(TRANSLATED_REPO_NAME, TRANSLATED_BRANCH_NAME, jsonPath, localFilepath);
 
                 using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
                 {
                     string json = reader.ReadToEnd();
                     JsonObject jsonObject = JsonNode.Parse(json).AsObject();
 
-                    List<TranslatedJson> translatedList = new List<TranslatedJson>();
-
                     // Load translated JSON based on specified structures
                     if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
                     {
                         foreach (KeyValuePair<string, JsonNode> node in jsonObject)
                         {
-                            translatedList.Add(new TranslatedJson
-                            {
-                                OriginalText = node.Key,
-                                TranslatedText = node.Value.ToString()
-                            });
+                            DataRow dr = _dataTable.NewRow();
+                            dr["OriginalText"] = node.Key;
+                            dr["TranslatedText"] = node.Value.ToString();
+                            _dataTable.Rows.Add(dr);
                         }
                     }
                     else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
@@ -396,11 +431,10 @@ namespace UmaMusumeLoadSqlData
 
                         foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
                         {
-                            translatedList.Add(new TranslatedJson
-                            {
-                                OriginalText = node.Key,
-                                TranslatedText = node.Value.ToString()
-                            });
+                            DataRow dr = _dataTable.NewRow();
+                            dr["OriginalText"] = node.Key;
+                            dr["TranslatedText"] = node.Value.ToString();
+                            _dataTable.Rows.Add(dr);
                         }
                     }
                     else
@@ -408,38 +442,36 @@ namespace UmaMusumeLoadSqlData
                         JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
                         foreach (JsonNode nodeArray in textJsonArray)
                         {
+                            DataRow dr = _dataTable.NewRow();
                             IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
                                 .Where(n => n.Key == "jpText" || n.Key == "enText");
 
-                            TranslatedJson translatedJson = new TranslatedJson();
                             foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
                             {
                                 if (node.Key == "jpText")
                                 {
-                                    translatedJson.OriginalText = node.Value.ToString();
+                                    dr["OriginalText"] = node.Value.ToString();
                                 }
                                 else
                                 {
-                                    translatedJson.TranslatedText = node.Value.ToString();
+                                    dr["TranslatedText"] = node.Value.ToString();
                                 }
                             }
 
-                            translatedList.Add(translatedJson);
-                        }
-                    }
-
-                    using (DataTable dataTable = translatedList.ToDataTable())
-                    {
-                        // Push translated data into destination database
-                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
-                        {
-                            _hadBulkInsertError = true;
+                            _dataTable.Rows.Add(dr);
                         }
                     }
                 }
 
                 File.Delete(localFilepath); // clean up
-                Console.WriteLine($"Deleted \"{localFilepath}\"");
+                if (AspNetCoreEnvironment == "Development")
+                {
+                    Console.WriteLine($"Deleted \"{localFilepath}\"");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine(ex.Message);
             }
         }
 
@@ -515,7 +547,7 @@ namespace UmaMusumeLoadSqlData
         #region Public Methods
         public static void CloseProgram(int exitCode = 0)
         {
-            if (_aspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+            if (AspNetCoreEnvironment == "Development" && RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
             {
                 Console.WriteLine("\nPress any key to close this program...");
                 Console.ReadKey();
