@@ -3,7 +3,6 @@ using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
 using System.Data.SQLite;
-using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Net.Http;
@@ -11,9 +10,6 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-
-using CsvHelper;
-using CsvHelper.Configuration;
 
 using MySqlConnector;
 
@@ -309,8 +305,8 @@ namespace UmaMusumeLoadSqlData
         {
             using (HttpClient client = new HttpClient())
             {
-                string repoName = "noccu/umamusume-db-translate";
-                string branchName = "playtest";
+                string repoName = "noccu/umamusu-translate";
+                string branchName = "master";
                 string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
                 GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
 
@@ -321,16 +317,15 @@ namespace UmaMusumeLoadSqlData
 
                 // Get lists needed for retrieval
                 IEnumerable<string> githubResults = response.Trees
-                    .Where(file => file.Path.Contains("src/data/"))
+                    .Where(file => file.Path.Contains("translations/"))
                     .Select(p => p.Path);
-                IEnumerable<string> translatedCsvs = githubResults.Where(file => file.Contains(".csv"));
                 IEnumerable<string> translatedJson = githubResults.Where(file => file.Contains(".json"));
-                IEnumerable<string> subDirectories = githubResults.Where(file => !file.Contains(".csv") && !file.Contains(".json"));
+                IEnumerable<string> subDirectories = githubResults.Where(file => !file.Contains(".json"));
 
                 githubResults = null; // clean up
 
                 // prepare storage
-                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/src/data");
+                Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/translations");
 
                 if (subDirectories.Any())
                 {
@@ -387,61 +382,6 @@ namespace UmaMusumeLoadSqlData
                                     if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
                                     {
                                         _hadBulkInsertError = true;
-                                    }
-                                }
-                            }
-                        }
-                        #endregion
-
-                        #region Translated CSVs
-                        foreach (string path in translatedCsvs)
-                        {
-                            string localFilepath = @$"{Environment.CurrentDirectory}/{path}";
-                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, path, localFilepath);
-
-                            /* Load CSV into a DataTable */
-                            CsvConfiguration config = new CsvConfiguration(CultureInfo.InvariantCulture)
-                            {
-                                BadDataFound = null,
-                                MissingFieldFound = null
-                            };
-
-                            using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
-                            {
-                                using (CsvReader csv = new CsvReader(reader, config))
-                                {
-                                    using (CsvDataReader dr = new CsvDataReader(csv))
-                                    {
-                                        DataTable dataTable = new DataTable();
-
-                                        try
-                                        {
-                                            dataTable.Load(dr);
-                                        }
-                                        catch (CsvHelperException ex)
-                                        {
-                                            // move onto the next .csv
-                                            _hadBulkInsertError = true;
-                                            Console.WriteLine(ex.Message);
-
-                                            continue;
-                                        }
-
-                                        if (dataTable.Columns.Count != 2)
-                                        {
-                                            Console.WriteLine($"ERROR: Incorrect column count for \"{path}\". "
-                                                + $"Found {dataTable.Columns.Count} column(s)");
-
-                                            // move onto the next .csv
-                                            _hadBulkInsertError = true;
-                                            continue;
-                                        }
-
-                                        /* Push new info into destination database */
-                                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
-                                        {
-                                            _hadBulkInsertError = true;
-                                        }
                                     }
                                 }
                             }
