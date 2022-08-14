@@ -37,6 +37,8 @@ namespace UmaMusumeLoadSqlData
         private static string _sqlServerConnectionString;
 
         private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
+        private static string _translatedRepoName = "noccu/umamusu-translate";
+        private static string _translatedBranchName = "master";
         
         static void Main(string[] args)
         {
@@ -305,9 +307,7 @@ namespace UmaMusumeLoadSqlData
         {
             using (HttpClient client = new HttpClient())
             {
-                string repoName = "noccu/umamusu-translate";
-                string branchName = "master";
-                string uri = $"https://api.github.com/repos/{repoName}/git/trees/{branchName}?recursive=1";
+                string uri = $"https://api.github.com/repos/{_translatedRepoName}/git/trees/{_translatedBranchName}?recursive=1";
                 GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
 
                 if (response == null)
@@ -357,86 +357,90 @@ namespace UmaMusumeLoadSqlData
                         truncateCommand.Connection = destinationConnection;
                         truncateCommand.ExecuteNonQuery();
 
-                        #region Translated JSONs
-                        foreach (string jsonPath in jsonFilePaths)
-                        {
-                            string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
-                            await GithubUtility.DownloadRemoteFileAsync(repoName, branchName, jsonPath, localFilepath);
-
-                            using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
-                            {
-                                string json = reader.ReadToEnd();
-                                JsonObject jsonObject = JsonNode.Parse(json).AsObject();
-
-                                List<TranslatedJson> translatedList = new List<TranslatedJson>();
-
-                                // Load translated JSON based on specified structures
-                                if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
-                                {
-                                    foreach (KeyValuePair<string, JsonNode> node in jsonObject)
-                                    {
-                                        translatedList.Add(new TranslatedJson
-                                        {
-                                            OriginalText = node.Key,
-                                            TranslatedText = node.Value.ToString()
-                                        });
-                                    }
-                                }
-                                else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
-                                {
-                                    JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
-
-                                    foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
-                                    {
-                                        translatedList.Add(new TranslatedJson
-                                        {
-                                            OriginalText = node.Key,
-                                            TranslatedText = node.Value.ToString()
-                                        });
-                                    }
-                                }
-                                else
-                                {
-                                    JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
-                                    foreach (JsonNode nodeArray in textJsonArray)
-                                    {
-                                        IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
-                                            .Where(n => n.Key == "jpText" || n.Key == "enText");
-
-                                        TranslatedJson translatedJson = new TranslatedJson();
-                                        foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
-                                        {
-                                            if (node.Key == "jpText")
-                                            {
-                                                translatedJson.OriginalText = node.Value.ToString();
-                                            }
-                                            else
-                                            {
-                                                translatedJson.TranslatedText = node.Value.ToString();
-                                            }
-                                        }
-
-                                        translatedList.Add(translatedJson);
-                                    }
-                                }
-
-                                using (DataTable dataTable = translatedList.ToDataTable())
-                                {
-                                    // Push translated data into destination database
-                                    if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
-                                    {
-                                        _hadBulkInsertError = true;
-                                    }
-                                }
-                            }
-
-                            File.Delete(localFilepath); // clean up
-                            Console.WriteLine($"Deleted \"{localFilepath}\"");
-                        }
-                        #endregion
+                        await LoadTranslatedJsonsAsync(jsonFilePaths, destinationConnection);
                     }
                 }
             };
+        }
+
+        private static async Task LoadTranslatedJsonsAsync<T>(IEnumerable<string> jsonFilePaths, T destinationConnection)
+            where T : IDbConnection, new()
+        {
+            foreach (string jsonPath in jsonFilePaths)
+            {
+                string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
+                await GithubUtility.DownloadRemoteFileAsync(_translatedRepoName, _translatedBranchName, jsonPath, localFilepath);
+
+                using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                {
+                    string json = reader.ReadToEnd();
+                    JsonObject jsonObject = JsonNode.Parse(json).AsObject();
+
+                    List<TranslatedJson> translatedList = new List<TranslatedJson>();
+
+                    // Load translated JSON based on specified structures
+                    if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
+                    {
+                        foreach (KeyValuePair<string, JsonNode> node in jsonObject)
+                        {
+                            translatedList.Add(new TranslatedJson
+                            {
+                                OriginalText = node.Key,
+                                TranslatedText = node.Value.ToString()
+                            });
+                        }
+                    }
+                    else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
+                    {
+                        JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
+
+                        foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                        {
+                            translatedList.Add(new TranslatedJson
+                            {
+                                OriginalText = node.Key,
+                                TranslatedText = node.Value.ToString()
+                            });
+                        }
+                    }
+                    else
+                    {
+                        JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
+                        foreach (JsonNode nodeArray in textJsonArray)
+                        {
+                            IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
+                                .Where(n => n.Key == "jpText" || n.Key == "enText");
+
+                            TranslatedJson translatedJson = new TranslatedJson();
+                            foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                            {
+                                if (node.Key == "jpText")
+                                {
+                                    translatedJson.OriginalText = node.Value.ToString();
+                                }
+                                else
+                                {
+                                    translatedJson.TranslatedText = node.Value.ToString();
+                                }
+                            }
+
+                            translatedList.Add(translatedJson);
+                        }
+                    }
+
+                    using (DataTable dataTable = translatedList.ToDataTable())
+                    {
+                        // Push translated data into destination database
+                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", dataTable, false))
+                        {
+                            _hadBulkInsertError = true;
+                        }
+                    }
+                }
+
+                File.Delete(localFilepath); // clean up
+                Console.WriteLine($"Deleted \"{localFilepath}\"");
+            }
         }
 
         private static List<string> SelectTableNames<T>(T connection) where T : IDbConnection
