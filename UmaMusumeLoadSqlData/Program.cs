@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
 using System.Data.SqlClient;
@@ -10,7 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-
+using System.Xml.Linq;
 using MySqlConnector;
 
 using UmaMusumeLoadSqlData.Models;
@@ -27,7 +28,7 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
-        private static DataTable _dataTable = new DataTable();
+        private static ConcurrentDictionary<string, string> _textDictionary = new ConcurrentDictionary<string, string>();
         private static bool _hadBulkInsertError = false;
         private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
         private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
@@ -371,29 +372,50 @@ namespace UmaMusumeLoadSqlData
                             truncateCommand.ExecuteNonQuery();
                         }
 
-                        _dataTable.Columns.Add("OriginalText");
-                        _dataTable.Columns.Add("TranslatedText");
-                        int numFiles = 0;
-
                         Console.WriteLine("\nStarted downloading JSON files...");
 
+                        List<Task> downloadTasks = new List<Task>();
+                        int numFiles = 0;
+
+                        // Download translated JSON files in batches
                         foreach (string jsonPath in jsonFilePaths)
                         {
-                            await DownloadTranslatedJsonFilesAsync(jsonPath);
+                            // Queue up the download
+                            downloadTasks.Add(DownloadTranslatedJsonFilesAsync(jsonPath));
                             numFiles++;
 
-                            if (numFiles % 20 == 0)
+                            // Limit to 200 concurrent downloads and wait until they're all done
+                            if (downloadTasks.Count >= 200)
                             {
+                                Task.WaitAll(downloadTasks.ToArray());
+                                downloadTasks.Clear(); // prep for next batch
                                 Console.WriteLine($"Downloaded {numFiles} of {jsonFilePaths.Count()} files");
                             }
                         }
 
+                        Task.WaitAll(downloadTasks.ToArray());
+
                         Console.WriteLine("Finished downloading JSON files");
 
-                        // Push translated data into destination database
-                        if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", _dataTable, false))
+                        // Load text into database
+                        using (DataTable importDataTable = new DataTable())
                         {
-                            _hadBulkInsertError = true;
+                            importDataTable.Columns.Add("OriginalText");
+                            importDataTable.Columns.Add("TranslatedText");
+
+                            foreach (KeyValuePair<string, string> textKeyValuePair in _textDictionary)
+                            {
+                                DataRow dr = importDataTable.NewRow();
+                                dr["OriginalText"] = textKeyValuePair.Key;
+                                dr["TranslatedText"] = textKeyValuePair.Value;
+                                importDataTable.Rows.Add(dr);
+                            }
+
+                            // Push translated data into destination database
+                            if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", importDataTable, false))
+                            {
+                                _hadBulkInsertError = true;
+                            }
                         }
                     }
                 };
@@ -411,69 +433,73 @@ namespace UmaMusumeLoadSqlData
                 string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
                 await GithubUtility.DownloadRemoteFileAsync(TRANSLATED_REPO_NAME, TRANSLATED_BRANCH_NAME, jsonPath, localFilepath);
 
-                using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                try
                 {
-                    string json = reader.ReadToEnd();
-                    JsonObject jsonObject = JsonNode.Parse(json).AsObject();
+                    using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
+                    {
+                        string json = reader.ReadToEnd();
+                        JsonObject jsonObject = JsonNode.Parse(json).AsObject();
 
-                    // Load translated JSON based on specified structures
-                    if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
-                    {
-                        foreach (KeyValuePair<string, JsonNode> node in jsonObject)
+                        // Load translated JSON based on specified structures
+                        if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
                         {
-                            DataRow dr = _dataTable.NewRow();
-                            dr["OriginalText"] = node.Key;
-                            dr["TranslatedText"] = node.Value.ToString();
-                            _dataTable.Rows.Add(dr);
+                            foreach (KeyValuePair<string, JsonNode> node in jsonObject)
+                            {
+                                _textDictionary.TryAdd(node.Key, node.Value.ToString());
+                            }
                         }
-                    }
-                    else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
-                    {
-                        JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
-
-                        foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                        else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
                         {
-                            DataRow dr = _dataTable.NewRow();
-                            dr["OriginalText"] = node.Key;
-                            dr["TranslatedText"] = node.Value.ToString();
-                            _dataTable.Rows.Add(dr);
-                        }
-                    }
-                    else
-                    {
-                        JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
-                        foreach (JsonNode nodeArray in textJsonArray)
-                        {
-                            DataRow dr = _dataTable.NewRow();
-                            IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
-                                .Where(n => n.Key == "jpText" || n.Key == "enText");
+                            JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
 
                             foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
                             {
-                                if (node.Key == "jpText")
-                                {
-                                    dr["OriginalText"] = node.Value.ToString();
-                                }
-                                else
-                                {
-                                    dr["TranslatedText"] = node.Value.ToString();
-                                }
+                                _textDictionary.TryAdd(node.Key, node.Value.ToString());
                             }
-
-                            if (string.IsNullOrEmpty(dr["OriginalText"].ToString()))
+                        }
+                        else
+                        {
+                            JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
+                            foreach (JsonNode nodeArray in textJsonArray)
                             {
-                                continue; // skip missing key
-                            }
+                                IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
+                                    .Where(n => n.Key == "jpText" || n.Key == "enText");
 
-                            _dataTable.Rows.Add(dr);
+                                string originalText = "";
+                                string translatedText = "";
+                                foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
+                                {
+                                    if (node.Key == "jpText")
+                                    {
+                                        originalText = node.Value.ToString();
+                                    }
+                                    else
+                                    {
+                                        translatedText = node.Value.ToString();
+                                    }
+                                }
+
+                                if (string.IsNullOrEmpty(originalText))
+                                {
+                                    continue; // skip missing key
+                                }
+
+                                _textDictionary.TryAdd(originalText, translatedText);
+                            }
                         }
                     }
                 }
-
-                File.Delete(localFilepath); // clean up
-                if (AspNetCoreEnvironment == "Development")
+                catch (Exception ex)
                 {
-                    Console.WriteLine($"Deleted \"{localFilepath}\"");
+                    Console.WriteLine(ex.Message);
+                }
+                finally
+                {
+                    File.Delete(localFilepath); // clean up
+                    if (AspNetCoreEnvironment == "Development")
+                    {
+                        Console.WriteLine($"Deleted \"{localFilepath}\"");
+                    }
                 }
             }
             catch (Exception ex)
