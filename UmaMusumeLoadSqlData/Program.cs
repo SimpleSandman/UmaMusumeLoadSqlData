@@ -11,7 +11,7 @@ using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json.Nodes;
 using System.Threading.Tasks;
-using System.Xml.Linq;
+
 using MySqlConnector;
 
 using UmaMusumeLoadSqlData.Models;
@@ -28,7 +28,7 @@ namespace UmaMusumeLoadSqlData
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
         private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
-        private static ConcurrentDictionary<string, string> _textDictionary = new ConcurrentDictionary<string, string>();
+        private static readonly ConcurrentDictionary<string, string> _textDictionary = new ConcurrentDictionary<string, string>();
         private static bool _hadBulkInsertError = false;
         private static string _masterDbFilepath = @$"{Environment.CurrentDirectory}\master.mdb";
         private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
