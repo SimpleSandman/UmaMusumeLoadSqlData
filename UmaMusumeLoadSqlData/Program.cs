@@ -41,6 +41,7 @@ namespace UmaMusumeLoadSqlData
         private static string _branchName;
         private static string _mySqlConnectionString;
         private static string _sqlServerConnectionString;
+        public static bool IsVerbose { get; private set; } = false;
         #endregion
 
         static void Main(string[] args)
@@ -49,7 +50,16 @@ namespace UmaMusumeLoadSqlData
             _repoName = args[1];
             _branchName = args[2];
             _mySqlConnectionString = args[3];
-            _sqlServerConnectionString = args[4];
+
+            if (args.Length >=5)
+            {
+                _sqlServerConnectionString = args[4];
+            }
+
+            if (args.Length >=6 && args[5].ToLower() == "verbose")
+            {
+                IsVerbose = true;
+            }
 
             MainAsync().GetAwaiter().GetResult();
         }
@@ -496,7 +506,7 @@ namespace UmaMusumeLoadSqlData
                 finally
                 {
                     File.Delete(localFilepath); // clean up
-                    if (AspNetCoreEnvironment == "Development")
+                    if (IsVerbose)
                     {
                         Console.WriteLine($"Deleted \"{localFilepath}\"");
                     }

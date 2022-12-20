@@ -23,7 +23,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                 sourceFilepath = sourceFilepath.Replace("#", "%23"); // URL encoding (since it was found in one of the file's names)
                 string rawUrl = $"https://raw.githubusercontent.com/{repoName}/{branchName}/{sourceFilepath}";
 
-                if (Program.AspNetCoreEnvironment == "Development")
+                if (Program.IsVerbose)
                 {
                     Console.WriteLine($"\nDownloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
                 }
@@ -35,7 +35,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                     File.WriteAllBytes(destinationFilepath, bytes);
                 }
 
-                if (Program.AspNetCoreEnvironment == "Development")
+                if (Program.IsVerbose)
                 {
                     Console.WriteLine($"SUCCESS: Downloaded \"{sourceFilepath}\" to \"{destinationFilepath}\"");
                 }

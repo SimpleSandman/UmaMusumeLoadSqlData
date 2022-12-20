@@ -2,7 +2,7 @@
   "profiles": {
     "UmaMusumeLoadSqlData": {
       "commandName": "Project",
-      "commandLineArgs": "\"Development\" \"SimpleSandman/UmaMusumeMasterMDB\" \"master\" \"user id=root;password=sa;host=localhost;database=umamusume;character set=utf8mb4;AllowLoadLocalInfile=true\" \"N/A\""
+      "commandLineArgs": "\"Development\" \"SimpleSandman/UmaMusumeMasterMDB\" \"master\" \"user id=root;password=sa;host=localhost;database=umamusume;character set=utf8mb4;AllowLoadLocalInfile=true\""
     }
   }
 }
