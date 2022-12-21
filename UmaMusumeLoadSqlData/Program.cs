@@ -418,7 +418,7 @@ namespace UmaMusumeLoadSqlData
                             truncateCommand.ExecuteNonQuery();
                         }
 
-                        Console.WriteLine("\nStarted downloading JSON files...");
+                        Console.WriteLine("\nStarted downloading JSON translation files...");
 
                         List<Task> downloadTasks = new List<Task>();
                         int numFiles = 0;
@@ -441,7 +441,7 @@ namespace UmaMusumeLoadSqlData
 
                         Task.WaitAll(downloadTasks.ToArray());
 
-                        Console.WriteLine("Finished downloading JSON files");
+                        Console.WriteLine("Finished downloading JSON translation files");
 
                         // Load text into database
                         using (DataTable importDataTable = new DataTable())
