@@ -151,17 +151,8 @@ namespace UmaMusumeLoadSqlData
         {
             try
             {
-                // MSSQL uses a separate schema name than the database
-                string tableSchema = "RawData.";
-                if (typeof(T) == typeof(MySqlConnection))
-                {
-                    tableSchema = "";
-                    Console.WriteLine($"\nAttempting to load \"{sourceFilename}\" table data into a MySQL/MariaDB database...\n");
-                }
-                else
-                {
-                    Console.WriteLine($"\nAttempting to load \"{sourceFilename}\" table data into a SQL Server database...\n");
-                }
+                string tableSchema = ""; // TODO: Save for possible future database that requires a schema
+                Console.WriteLine($"\nAttempting to load \"{sourceFilename}\" table data into a MySQL/MariaDB database...\n");
 
                 /* Push new info into destination database */
                 using (T destinationConnection = new T())
