@@ -137,6 +137,11 @@ namespace UmaMusumeLoadSqlData
                 await SqlDestinationAsync<MySqlConnection, MySqlCommand>(sourceFilename, _mySqlConnectionString,
                     sqliteMasterTableNames, sqliteMasterIndexNames, sqliteMasterDataTables).ConfigureAwait(false);
             }
+
+            // Memory clean up
+            sqliteMasterTableNames.Clear();
+            sqliteMasterIndexNames.Clear();
+            sqliteMasterDataTables.Clear();
         }
 
         private static async Task SqlDestinationAsync<T, U>(string sourceFilename, string connectionString, 
