@@ -15,7 +15,7 @@ namespace UmaMusumeLoadSqlData.Utilities
         #region ISqlUtility Methods
         public List<ColumnMetadata> SelectColumnMetadata(MySqlConnection connection, string tableName)
         {
-            List<ColumnMetadata> result = new List<ColumnMetadata>();
+            List<ColumnMetadata> result = [];
 
             // TODO: Store database name (table_schema) somewhere else
             string commandText =
@@ -28,19 +28,17 @@ namespace UmaMusumeLoadSqlData.Utilities
                     AND TABLE_SCHEMA = '{connection.Database}'
                 ORDER BY TABLE_NAME, ORDINAL_POSITION;";
 
-            using (MySqlCommand command = new MySqlCommand(commandText, connection))
+            using (MySqlCommand command = new(commandText, connection))
             {
-                using (MySqlDataReader reader = command.ExecuteReader())
+                using MySqlDataReader reader = command.ExecuteReader();
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    result.Add(new ColumnMetadata
                     {
-                        result.Add(new ColumnMetadata
-                        {
-                            ColumnName = reader.GetString(0),
-                            ColumnDataType = reader.GetString(1),
-                            IsNullable = reader.GetString(2) == "YES"
-                        });
-                    }
+                        ColumnName = reader.GetString(0),
+                        ColumnDataType = reader.GetString(1),
+                        IsNullable = reader.GetString(2) == "YES"
+                    });
                 }
             }
 
@@ -51,17 +49,15 @@ namespace UmaMusumeLoadSqlData.Utilities
         #region ISqlDestination Methods
         public List<string> SelectTableNames(MySqlConnection connection)
         {
-            List<string> result = new List<string>();
+            List<string> result = [];
 
             // TODO: Store database name (table_schema) somewhere else
-            using (MySqlCommand command = new MySqlCommand($"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{connection.Database}'", connection))
+            using (MySqlCommand command = new($"SELECT TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '{connection.Database}'", connection))
             {
-                using (MySqlDataReader reader = command.ExecuteReader())
+                using MySqlDataReader reader = command.ExecuteReader();
+                while (reader.Read())
                 {
-                    while (reader.Read())
-                    {
-                        result.Add(reader.GetString(0));
-                    }
+                    result.Add(reader.GetString(0));
                 }
             }
 
@@ -72,7 +68,7 @@ namespace UmaMusumeLoadSqlData.Utilities
         {
             try
             {
-                MySqlBulkCopy bulkCopy = new MySqlBulkCopy(connection)
+                MySqlBulkCopy bulkCopy = new(connection)
                 {
                     DestinationTableName = tableName
                 };

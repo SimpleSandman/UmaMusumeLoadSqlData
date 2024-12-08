@@ -26,7 +26,7 @@ namespace UmaMusumeLoadSqlData.Utilities
                     Console.WriteLine($"\nDownloading \"{sourceFilepath}\" from \"{repoName}/{branchName}\"...");
                 }
 
-                using (HttpClient client = new HttpClient())
+                using (HttpClient client = new())
                 {
                     client.DefaultRequestHeaders.Add("user-agent", "Anything"); // user agent is required https://developer.github.com/v3/#user-agent-required
                     byte[] bytes = await client.GetByteArrayAsync(rawUrl);
