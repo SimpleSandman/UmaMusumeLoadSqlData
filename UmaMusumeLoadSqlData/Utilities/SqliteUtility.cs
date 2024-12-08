@@ -13,24 +13,21 @@ namespace UmaMusumeLoadSqlData.Utilities
         #region ISqlUtility Method
         public List<ColumnMetadata> SelectColumnMetadata(SQLiteConnection connection, string tableName)
         {
-            List<ColumnMetadata> result = new List<ColumnMetadata>();
+            List<ColumnMetadata> result = [];
 
             using (SQLiteCommand command = connection.CreateCommand())
             {
                 command.CommandText = $"SELECT name, type, [notnull] FROM PRAGMA_TABLE_INFO('{tableName}');";
 
-                using (SQLiteDataReader reader = command.ExecuteReader())
+                using SQLiteDataReader reader = command.ExecuteReader();
+                while (reader.Read())
                 {
-                    while (reader.Read())
+                    result.Add(new ColumnMetadata
                     {
-                        result.Add(new ColumnMetadata
-                        {
-                            ColumnName = reader.GetString(0),
-                            ColumnDataType = reader.GetString(1),
-                            IsNullable = !reader.GetBoolean(2) // reverse null return
-                        });
-
-                    }
+                        ColumnName = reader.GetString(0),
+                        ColumnDataType = reader.GetString(1),
+                        IsNullable = !reader.GetBoolean(2) // reverse null return
+                    });
                 }
             }
 
@@ -38,68 +35,56 @@ namespace UmaMusumeLoadSqlData.Utilities
         }
         #endregion
 
-        public void LoadSqliteDataTables(SQLiteConnection connection, List<SqliteMasterRecord> sqliteTableNames, List<DataTable> sqliteDataTables)
+        public static void LoadSqliteDataTables(SQLiteConnection connection, List<SqliteMasterRecord> sqliteTableNames, List<DataTable> sqliteDataTables)
         {
-            using (SQLiteCommand tableDataCommand = connection.CreateCommand())
+            using SQLiteCommand tableDataCommand = connection.CreateCommand();
+            foreach (string sqliteTableName in sqliteTableNames.Select(n => n.TableName))
             {
-                foreach (string sqliteTableName in sqliteTableNames.Select(n => n.TableName))
-                {
-                    tableDataCommand.CommandText = $"SELECT * FROM [{sqliteTableName}]";
+                tableDataCommand.CommandText = $"SELECT * FROM [{sqliteTableName}]";
 
-                    using (SQLiteDataReader reader = tableDataCommand.ExecuteReader())
+                using SQLiteDataReader reader = tableDataCommand.ExecuteReader();
+                DataTable dt = new();
+                dt.Load(reader);
+                sqliteDataTables.Add(dt);
+            }
+        }
+
+        public static void SqliteTableNames(SQLiteConnection connection, List<SqliteMasterRecord> sqliteTableNames)
+        {
+            using SQLiteCommand tableNameCommand = connection.CreateCommand();
+            tableNameCommand.CommandText = "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'table' ORDER BY tbl_name";
+
+            using SQLiteDataReader reader = tableNameCommand.ExecuteReader();
+            while (reader.Read())
+            {
+                string tableName = reader.GetString(0);
+                if (tableName != "sqlite_stat1")
+                {
+                    sqliteTableNames.Add(new SqliteMasterRecord
                     {
-                        DataTable dt = new DataTable();
-                        dt.Load(reader);
-                        sqliteDataTables.Add(dt);
-                    }
+                        TableName = tableName,
+                        SqlScript = reader.GetString(1)
+                    });
                 }
             }
         }
 
-        public void SqliteTableNames(SQLiteConnection connection, List<SqliteMasterRecord> sqliteTableNames)
+        public static void SqliteIndexScript(SQLiteConnection connection, List<SqliteMasterRecord> sqliteIndexNames)
         {
-            using (SQLiteCommand tableNameCommand = connection.CreateCommand())
+            using SQLiteCommand indexNameCommand = connection.CreateCommand();
+            indexNameCommand.CommandText = "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY tbl_name";
+
+            using SQLiteDataReader reader = indexNameCommand.ExecuteReader();
+            while (reader.Read())
             {
-                tableNameCommand.CommandText = "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'table' ORDER BY tbl_name";
-
-                using (SQLiteDataReader reader = tableNameCommand.ExecuteReader())
+                string tableName = reader.GetString(0);
+                if (tableName != "sqlite_stat1")
                 {
-                    while (reader.Read())
+                    sqliteIndexNames.Add(new SqliteMasterRecord
                     {
-                        string tableName = reader.GetString(0);
-                        if (tableName != "sqlite_stat1")
-                        {
-                            sqliteTableNames.Add(new SqliteMasterRecord 
-                            { 
-                                TableName = tableName, 
-                                SqlScript = reader.GetString(1) 
-                            });
-                        }
-                    }
-                }
-            }
-        }
-
-        public void SqliteIndexScript(SQLiteConnection connection, List<SqliteMasterRecord> sqliteIndexNames)
-        {
-            using (SQLiteCommand indexNameCommand = connection.CreateCommand())
-            {
-                indexNameCommand.CommandText = "SELECT tbl_name, sql FROM sqlite_master WHERE type = 'index' AND sql IS NOT NULL ORDER BY tbl_name";
-
-                using (SQLiteDataReader reader = indexNameCommand.ExecuteReader())
-                {
-                    while (reader.Read())
-                    {
-                        string tableName = reader.GetString(0);
-                        if (tableName != "sqlite_stat1")
-                        {
-                            sqliteIndexNames.Add(new SqliteMasterRecord
-                            {
-                                TableName = tableName,
-                                SqlScript = reader.GetString(1)
-                            });
-                        }
-                    }
+                        TableName = tableName,
+                        SqlScript = reader.GetString(1)
+                    });
                 }
             }
         }
