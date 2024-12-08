@@ -12,10 +12,8 @@ This console app will take your DMM's `master.mdb` file and load it into either 
   - Download `master.mdb` from specified GitHub branch
 - MySQL Connection String *(required)*
   - Set to "N/A" to skip
-- SQL Server Connection String *(required)*
-  - Set to "N/A" to skip
 
 ### Example:
 ```cmd
-dotnet run "Development" "SimpleSandman/UmaMusumeMasterMDB" "master" "user id=;password=;host=;database=;character set=utf8mb4;AllowLoadLocalInfile=true" "Server=;Database=;Integrated Security=SSPI;"
+dotnet run "Development" "SimpleSandman/UmaMusumeMasterMDB" "master" "user id=;password=;host=;database=;character set=utf8mb4;AllowLoadLocalInfile=true"
 ```
