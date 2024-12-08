@@ -7,7 +7,6 @@
 
   <ItemGroup>
     <PackageReference Include="MySqlConnector" Version="2.4.0" />
-    <PackageReference Include="System.Data.SqlClient" Version="4.9.0" />
     <PackageReference Include="System.Data.SQLite" Version="1.0.119" />
   </ItemGroup>
 

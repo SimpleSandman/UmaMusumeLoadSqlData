@@ -1,15 +1,10 @@
 ﻿using System;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
 using System.Data.SQLite;
 using System.IO;
 using System.Linq;
-using System.Net.Http;
 using System.Runtime.InteropServices;
-using System.Text;
-using System.Text.Json.Nodes;
 using System.Threading.Tasks;
 
 using MySqlConnector;
@@ -23,16 +18,11 @@ namespace UmaMusumeLoadSqlData
     {
         #region Private Class Variables
         private static readonly SqliteUtility _sqliteUtility = new SqliteUtility();
-        private static readonly SqlServerUtility _sqlServerUtility = new SqlServerUtility();
         private static readonly MySqlUtility _mySqlUtility = new MySqlUtility();
-        private static readonly ConcurrentDictionary<string, string> _textDictionary = new ConcurrentDictionary<string, string>();
         private static bool _hadBulkInsertError = false;
         #endregion
 
         #region Private Const Variables
-        private const string TRANSLATED_REPO_NAME = "noccu/umamusu-translate";
-        private const string TRANSLATED_BRANCH_NAME = "master";
-
         private const string SOURCE_MASTER_FILENAME = "master/master.mdb";
         private const string SOURCE_META_FILENAME = "meta";
         #endregion
@@ -42,7 +32,6 @@ namespace UmaMusumeLoadSqlData
         private static string _repoName;
         private static string _branchName;
         private static string _mySqlConnectionString;
-        private static string _sqlServerConnectionString;
         public static bool IsVerbose { get; private set; } = false;
         #endregion
 
@@ -53,12 +42,7 @@ namespace UmaMusumeLoadSqlData
             _branchName = args[2];
             _mySqlConnectionString = args[3];
 
-            if (args.Length >=5)
-            {
-                _sqlServerConnectionString = args[4];
-            }
-
-            if (args.Length >=6 && args[5].ToLower() == "verbose")
+            if (args.Length >= 5 && args[4].ToLower() == "verbose")
             {
                 IsVerbose = true;
             }
@@ -103,17 +87,6 @@ namespace UmaMusumeLoadSqlData
 
                 await LoadDatabaseData(masterDbDestinationFilepath, SOURCE_MASTER_FILENAME);
                 await LoadDatabaseData(metaDbDestinationFilepath, SOURCE_META_FILENAME);
-
-                /* Import data from SQLite into the provided database(s) below */
-                if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
-                {
-                    await LoadEnglishTranslationsAsync<MySqlConnection, MySqlCommand>(_mySqlConnectionString).ConfigureAwait(false);
-                }
-
-                if (!string.IsNullOrEmpty(_sqlServerConnectionString) && _sqlServerConnectionString != "N/A")
-                {
-                    await LoadEnglishTranslationsAsync<SqlConnection, SqlCommand>(_sqlServerConnectionString).ConfigureAwait(false);
-                }
 
                 // Provide special output per error
                 if (_hadBulkInsertError)
@@ -162,12 +135,6 @@ namespace UmaMusumeLoadSqlData
             if (!string.IsNullOrEmpty(_mySqlConnectionString) && _mySqlConnectionString != "N/A")
             {
                 await SqlDestinationAsync<MySqlConnection, MySqlCommand>(sourceFilename, _mySqlConnectionString,
-                    sqliteMasterTableNames, sqliteMasterIndexNames, sqliteMasterDataTables).ConfigureAwait(false);
-            }
-
-            if (!string.IsNullOrEmpty(_sqlServerConnectionString) && _sqlServerConnectionString != "N/A")
-            {
-                await SqlDestinationAsync<SqlConnection, SqlCommand>(sourceFilename, _sqlServerConnectionString,
                     sqliteMasterTableNames, sqliteMasterIndexNames, sqliteMasterDataTables).ConfigureAwait(false);
             }
         }
@@ -359,210 +326,11 @@ namespace UmaMusumeLoadSqlData
             return false;
         }
 
-        private static async Task LoadEnglishTranslationsAsync<T, U>(string connectionString) 
-            where T : IDbConnection, new()
-            where U : IDbCommand, new()
-        {
-            try
-            {
-                using (HttpClient client = new HttpClient())
-                {
-                    string uri = $"https://api.github.com/repos/{TRANSLATED_REPO_NAME}/git/trees/{TRANSLATED_BRANCH_NAME}?recursive=1";
-                    GithubRepoRoot response = await GithubUtility.GetGithubResponseAsync<GithubRepoRoot>(uri, client);
-
-                    if (response == null)
-                    {
-                        return; // cannot retrieve info
-                    }
-
-                    // Get lists needed for retrieval
-                    IEnumerable<string> githubResults = response.Trees
-                        .Where(file => file.Path.Contains("translations/"))
-                        .Select(p => p.Path);
-                    IEnumerable<string> jsonFilePaths = githubResults.Where(file => file.Contains(".json"));
-                    IEnumerable<string> subDirectories = githubResults.Where(directory => !directory.Contains(".json"));
-
-                    // clean up
-                    response = null;
-                    githubResults = null;
-
-                    // Prepare file storage location
-                    Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/translations");
-
-                    if (subDirectories.Any())
-                    {
-                        foreach (string directory in subDirectories)
-                        {
-                            Directory.CreateDirectory(@$"{Environment.CurrentDirectory}/{directory}");
-                        }
-                    }
-
-                    // Load translations
-                    using (T destinationConnection = new T())
-                    {
-                        destinationConnection.ConnectionString = connectionString;
-                        destinationConnection.Open();
-
-                        using (U truncateCommand = new U())
-                        {
-                            // MSSQL uses a separate schema name than the database
-                            string tableSchema = "dbo.";
-                            if (typeof(T) == typeof(MySqlConnection))
-                            {
-                                tableSchema = "";
-                            }
-
-                            // Start "text_data_english" table with a clean slate
-                            truncateCommand.CommandText = $"TRUNCATE TABLE {tableSchema}text_data_english";
-                            truncateCommand.Connection = destinationConnection;
-                            truncateCommand.ExecuteNonQuery();
-                        }
-
-                        Console.WriteLine("\nStarted downloading JSON translation files...");
-
-                        List<Task> downloadTasks = new List<Task>();
-                        int numFiles = 0;
-
-                        // Download translated JSON files in batches
-                        foreach (string jsonPath in jsonFilePaths)
-                        {
-                            // Queue up the download
-                            downloadTasks.Add(DownloadTranslatedJsonFilesAsync(jsonPath));
-                            numFiles++;
-
-                            // Limit to 200 concurrent downloads and wait until they're all done
-                            if (downloadTasks.Count >= 200)
-                            {
-                                Task.WaitAll(downloadTasks.ToArray());
-                                downloadTasks.Clear(); // prep for next batch
-                                Console.WriteLine($"Downloaded {numFiles} of {jsonFilePaths.Count()} files");
-                            }
-                        }
-
-                        Task.WaitAll(downloadTasks.ToArray());
-
-                        Console.WriteLine("Finished downloading JSON translation files");
-
-                        // Load text into database
-                        using (DataTable importDataTable = new DataTable())
-                        {
-                            importDataTable.Columns.Add("OriginalText");
-                            importDataTable.Columns.Add("TranslatedText");
-
-                            foreach (KeyValuePair<string, string> textKeyValuePair in _textDictionary)
-                            {
-                                DataRow dr = importDataTable.NewRow();
-                                dr["OriginalText"] = textKeyValuePair.Key;
-                                dr["TranslatedText"] = textKeyValuePair.Value;
-                                importDataTable.Rows.Add(dr);
-                            }
-
-                            // Push translated data into destination database
-                            if (!await TryBulkInsertDataTableAsync(destinationConnection, "text_data_english", importDataTable, false))
-                            {
-                                _hadBulkInsertError = true;
-                            }
-                        }
-                    }
-                };
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
-
-        private static async Task DownloadTranslatedJsonFilesAsync(string jsonPath)
-        {
-            try
-            {
-                string localFilepath = @$"{Environment.CurrentDirectory}/{jsonPath}";
-                await GithubUtility.DownloadRemoteFileAsync(TRANSLATED_REPO_NAME, TRANSLATED_BRANCH_NAME, jsonPath, localFilepath);
-
-                try
-                {
-                    using (StreamReader reader = new StreamReader(localFilepath, Encoding.UTF8))
-                    {
-                        string json = reader.ReadToEnd();
-                        JsonObject jsonObject = JsonNode.Parse(json).AsObject();
-
-                        // Load translated JSON based on specified structures
-                        if (localFilepath == @$"{Environment.CurrentDirectory}/translations/localify/ui.json")
-                        {
-                            foreach (KeyValuePair<string, JsonNode> node in jsonObject)
-                            {
-                                _textDictionary.TryAdd(node.Key, node.Value.ToString());
-                            }
-                        }
-                        else if (localFilepath.Contains(@$"{Environment.CurrentDirectory}/translations/mdb/"))
-                        {
-                            JsonObject textJsonObject = jsonObject.Single(k => k.Key == "text").Value.AsObject();
-
-                            foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
-                            {
-                                _textDictionary.TryAdd(node.Key, node.Value.ToString());
-                            }
-                        }
-                        else
-                        {
-                            JsonArray textJsonArray = jsonObject.Single(k => k.Key == "text").Value.AsArray();
-                            foreach (JsonNode nodeArray in textJsonArray)
-                            {
-                                IEnumerable<KeyValuePair<string, JsonNode>> textJsonObject = nodeArray.AsObject()
-                                    .Where(n => n.Key == "jpText" || n.Key == "enText");
-
-                                string originalText = "";
-                                string translatedText = "";
-                                foreach (KeyValuePair<string, JsonNode> node in textJsonObject)
-                                {
-                                    if (node.Key == "jpText")
-                                    {
-                                        originalText = node.Value.ToString();
-                                    }
-                                    else
-                                    {
-                                        translatedText = node.Value.ToString();
-                                    }
-                                }
-
-                                if (string.IsNullOrEmpty(originalText))
-                                {
-                                    continue; // skip missing key
-                                }
-
-                                _textDictionary.TryAdd(originalText, translatedText);
-                            }
-                        }
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine(ex.Message);
-                }
-                finally
-                {
-                    File.Delete(localFilepath); // clean up
-                    if (IsVerbose)
-                    {
-                        Console.WriteLine($"Deleted \"{localFilepath}\"");
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine(ex.Message);
-            }
-        }
-
         private static List<string> SelectTableNames<T>(T connection) where T : IDbConnection
         {
             try
             {
-                if (typeof(T) == typeof(SqlConnection))
-                {
-                    return _sqlServerUtility.SelectTableNames(connection as SqlConnection);
-                }
-                else if (typeof(T) == typeof(MySqlConnection))
+                if (typeof(T) == typeof(MySqlConnection))
                 {
                     return _mySqlUtility.SelectTableNames(connection as MySqlConnection);
                 }
@@ -579,11 +347,7 @@ namespace UmaMusumeLoadSqlData
         {
             try
             {
-                if (typeof(T) == typeof(SqlConnection))
-                {
-                    return _sqlServerUtility.SelectColumnMetadata(connection as SqlConnection, tableName);
-                }
-                else if (typeof(T) == typeof(MySqlConnection))
+                if (typeof(T) == typeof(MySqlConnection))
                 {
                     return _mySqlUtility.SelectColumnMetadata(connection as MySqlConnection, tableName);
                 }
@@ -605,11 +369,7 @@ namespace UmaMusumeLoadSqlData
         {
             try
             {
-                if (typeof(T) == typeof(SqlConnection))
-                {
-                    return await _sqlServerUtility.TryBulkInsertDataTableAsync(connection as SqlConnection, tableName, sourceDataTable, isFirstAttempt);
-                }
-                else if (typeof(T) == typeof(MySqlConnection))
+                if (typeof(T) == typeof(MySqlConnection))
                 {
                     return await _mySqlUtility.TryBulkInsertDataTableAsync(connection as MySqlConnection, tableName, sourceDataTable, isFirstAttempt);
                 }
